@@ -9,11 +9,12 @@ from resume_mvp.domain import (
     Fact,
     JobAnalysis,
     JobProject,
+    PracticeSession,
     ResumeDocument,
     ResumeVersion,
     utc_now,
 )
-from resume_mvp.tables import ProjectRecord, ResumeVersionRecord
+from resume_mvp.tables import PracticeSessionRecord, ProjectRecord, ResumeVersionRecord
 
 
 class ProjectNotFoundError(LookupError):
@@ -21,6 +22,10 @@ class ProjectNotFoundError(LookupError):
 
 
 class VersionNotFoundError(LookupError):
+    pass
+
+
+class PracticeSessionNotFoundError(LookupError):
     pass
 
 
@@ -141,6 +146,33 @@ class ProjectRepository:
             project.updated_at = utc_now()
             session.commit()
             return self._project(project)
+
+    def save_practice(self, practice: PracticeSession) -> PracticeSession:
+        with self._sessions() as session:
+            project = session.get(ProjectRecord, practice.project_id)
+            if project is None:
+                raise ProjectNotFoundError(practice.project_id)
+            record = session.get(PracticeSessionRecord, practice.id)
+            if record is None:
+                record = PracticeSessionRecord(
+                    id=practice.id,
+                    project_id=practice.project_id,
+                    payload=practice.model_dump(mode="json"),
+                    updated_at=practice.updated_at,
+                )
+                session.add(record)
+            else:
+                record.payload = practice.model_dump(mode="json")
+                record.updated_at = practice.updated_at
+            session.commit()
+            return practice
+
+    def get_practice(self, session_id: str) -> PracticeSession:
+        with self._sessions() as session:
+            record = session.get(PracticeSessionRecord, session_id)
+            if record is None:
+                raise PracticeSessionNotFoundError(session_id)
+            return PracticeSession.model_validate(record.payload)
 
     @staticmethod
     def _project(record: ProjectRecord) -> JobProject:

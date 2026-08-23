@@ -194,6 +194,53 @@ class QuestionList(BaseModel):
     items: list[FollowupQuestion] = Field(default_factory=list)
 
 
+class PracticeQuestion(BaseModel):
+    id: str = Field(default_factory=new_id)
+    category: str
+    prompt: str
+    hint: str = ""
+    explanation: str | None = None
+    requirement_ids: list[str] = Field(default_factory=list)
+    fact_ids: list[str] = Field(default_factory=list)
+
+
+class PracticeFeedback(BaseModel):
+    dimensions: dict[str, str] = Field(default_factory=dict)
+    summary: str
+    improved_answer: str = ""
+    weaknesses: list[str] = Field(default_factory=list)
+    percentage_score: None = None
+
+
+class PracticeEvaluation(BaseModel):
+    feedback: PracticeFeedback
+    explanation: str = ""
+    follow_up: str = ""
+    next_question: PracticeQuestion | None = None
+
+
+class PracticeTurn(BaseModel):
+    id: str = Field(default_factory=new_id)
+    question: PracticeQuestion
+    answer: str
+    feedback: PracticeFeedback
+    explanation: str = ""
+    follow_up: str = ""
+    answered_at: datetime = Field(default_factory=utc_now)
+
+
+class PracticeSession(BaseModel):
+    id: str = Field(default_factory=new_id)
+    project_id: str
+    kind: Literal["interview", "written"]
+    status: Literal["active", "completed"] = "active"
+    current_question: PracticeQuestion | None = None
+    turns: list[PracticeTurn] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class ResumeVersion(BaseModel):
     id: str
     project_id: str
