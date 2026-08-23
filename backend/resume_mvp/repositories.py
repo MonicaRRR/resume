@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from resume_mvp.domain import (
+    ApplicationType,
     Fact,
     JobAnalysis,
     JobProject,
@@ -33,11 +34,19 @@ class ProjectRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._sessions = session_factory
 
-    def create(self, *, title: str, company_name: str, job_description: str) -> JobProject:
+    def create(
+        self,
+        *,
+        title: str,
+        company_name: str,
+        application_type: ApplicationType,
+        job_description: str,
+    ) -> JobProject:
         with self._sessions() as session:
             record = ProjectRecord(
                 title=title.strip(),
                 company_name=company_name.strip(),
+                application_type=application_type,
                 job_description=job_description.strip(),
             )
             session.add(record)
@@ -64,6 +73,7 @@ class ProjectRepository:
         *,
         title: str | None = None,
         company_name: str | None = None,
+        application_type: ApplicationType | None = None,
         job_description: str | None = None,
         job_analysis: JobAnalysis | None = None,
         selected_template_id: str | None = None,
@@ -76,6 +86,8 @@ class ProjectRepository:
                 record.title = title.strip()
             if company_name is not None:
                 record.company_name = company_name.strip()
+            if application_type is not None:
+                record.application_type = application_type
             if job_description is not None:
                 record.job_description = job_description.strip()
             if job_analysis is not None:
@@ -180,6 +192,7 @@ class ProjectRepository:
             id=record.id,
             title=record.title,
             company_name=record.company_name,
+            application_type=record.application_type,
             job_description=record.job_description,
             job_analysis=JobAnalysis.model_validate(record.job_analysis) if record.job_analysis else None,
             active_resume_version_id=record.active_resume_version_id,

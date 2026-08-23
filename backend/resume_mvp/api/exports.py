@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from resume_mvp.api.dependencies import AppServices, get_services
 from resume_mvp.domain import JobProject, ResumeVersion
 from resume_mvp.exports import build_codex_handoff, build_docx, build_resume_json
+from resume_mvp.page_policy import evaluate_page_policy
 from resume_mvp.repositories import ProjectNotFoundError
 
 
@@ -21,8 +22,22 @@ class HandoffResponse(BaseModel):
 @router.post("/{project_id}/export/docx")
 def export_docx(project_id: str, services: AppServices = Depends(get_services)) -> Response:
     project, version = _active(services, project_id)
+    policy = evaluate_page_policy(version.resume, project.application_type)
+    if policy.overflow:
+        raise HTTPException(
+            422,
+            detail={
+                "code": "RESUME_OVERFLOW",
+                "message": "当前内容超过一页，请先使用一页优化建议精简排版",
+                "largest_sections": policy.largest_sections[:3],
+            },
+        )
     try:
-        content = build_docx(version.resume, project.selected_template_id)
+        content = build_docx(
+            version.resume,
+            project.selected_template_id,
+            project.application_type,
+        )
     except Exception as error:
         raise HTTPException(500, detail={"code": "EXPORT_FAILED", "message": "DOCX 导出失败"}) from error
     if not content:

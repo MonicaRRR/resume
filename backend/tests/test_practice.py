@@ -25,6 +25,7 @@ def project() -> JobProject:
     return JobProject(
         id="project-1",
         title="后端工程师",
+        application_type="experienced",
         job_description="负责 Python API",
         job_analysis=JobAnalysis(role_title="后端工程师"),
         created_at=now,

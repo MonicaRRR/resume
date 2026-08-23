@@ -58,6 +58,7 @@ def test_project_import_analyze_and_apply_selected_patch(tmp_path: Path) -> None
         json={
             "title": "后端工程师",
             "company_name": "示例科技",
+            "application_type": "experienced",
             "job_description": "负责 Python API",
         },
     )
@@ -108,7 +109,30 @@ def test_project_requires_nonempty_jd(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/projects",
-        json={"title": "后端工程师", "company_name": "", "job_description": "  "},
+        json={
+            "title": "后端工程师",
+            "company_name": "",
+            "application_type": "experienced",
+            "job_description": "  ",
+        },
     )
 
     assert response.status_code == 422
+
+
+def test_project_api_roundtrips_application_type(tmp_path: Path) -> None:
+    """Catches losing the page policy when a project is stored and fetched."""
+    client = TestClient(create_app(data_dir=tmp_path))
+
+    response = client.post(
+        "/api/projects",
+        json={
+            "title": "实习申请",
+            "company_name": "",
+            "application_type": "internship",
+            "job_description": "参与 Python API 开发",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["application_type"] == "internship"

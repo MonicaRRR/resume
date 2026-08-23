@@ -18,6 +18,7 @@ from resume_mvp.api.dependencies import (
     get_services,
 )
 from resume_mvp.domain import (
+    ApplicationType,
     Fact,
     JobProject,
     MatchReport,
@@ -38,6 +39,7 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 class ProjectCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     company_name: str = Field(default="", max_length=200)
+    application_type: ApplicationType
     job_description: str = Field(min_length=1)
 
     @field_validator("title", "job_description")
@@ -51,6 +53,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     title: str | None = None
     company_name: str | None = None
+    application_type: ApplicationType | None = None
     job_description: str | None = None
     selected_template_id: str | None = None
 
@@ -92,6 +95,7 @@ def create_project(body: ProjectCreate, services: AppServices = Depends(get_serv
     return services.repository.create(
         title=body.title,
         company_name=body.company_name,
+        application_type=body.application_type,
         job_description=body.job_description,
     )
 
@@ -241,6 +245,7 @@ async def suggest_patch(
             project.job_analysis,
             version.resume,
             version.facts,
+            application_type=project.application_type,
         )
     except UnsupportedFactError as error:
         raise HTTPException(422, detail={"code": "FACT_EVIDENCE_INVALID", "message": str(error)}) from error

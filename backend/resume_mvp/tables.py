@@ -13,6 +13,7 @@ class ProjectRecord(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(200))
     company_name: Mapped[str] = mapped_column(String(200), default="")
+    application_type: Mapped[str] = mapped_column(String(20), default="experienced")
     job_description: Mapped[str] = mapped_column(Text)
     job_analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     active_resume_version_id: Mapped[str | None] = mapped_column(String, nullable=True)

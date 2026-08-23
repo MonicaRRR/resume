@@ -16,6 +16,7 @@ def utc_now() -> datetime:
 
 
 Origin = Literal["upload", "questionnaire", "manual", "ai_rewrite"]
+ApplicationType = Literal["campus", "internship", "experienced"]
 
 
 class SourcedText(BaseModel):
@@ -254,6 +255,7 @@ class JobProject(BaseModel):
     id: str
     title: str
     company_name: str = ""
+    application_type: ApplicationType = "experienced"
     job_description: str
     job_analysis: JobAnalysis | None = None
     active_resume_version_id: str | None = None

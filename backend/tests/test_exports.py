@@ -2,6 +2,7 @@ import json
 from io import BytesIO
 
 from docx import Document
+from docx.shared import Cm, Pt
 
 from resume_mvp.domain import (
     Fact,
@@ -31,6 +32,7 @@ def sample_project() -> JobProject:
         id="project-1",
         title="后端工程师",
         company_name="示例科技",
+        application_type="experienced",
         job_description="负责 Python API",
         job_analysis=JobAnalysis(role_title="后端工程师"),
         selected_template_id="clear-single",
@@ -90,3 +92,13 @@ def test_codex_handoff_omits_contact_details_but_keeps_confirmed_facts() -> None
     assert "private@example.com" not in markdown
     assert "13800000000" not in markdown
     assert "不得虚构事实" in markdown
+
+
+def test_campus_docx_uses_compact_layout_tokens() -> None:
+    """Catches one-page DOCX exports rendering with social-hire spacing."""
+    campus = Document(BytesIO(build_docx(sample_resume(), "clear-single", "campus")))
+    experienced = Document(BytesIO(build_docx(sample_resume(), "clear-single", "experienced")))
+
+    assert campus.sections[0].top_margin < experienced.sections[0].top_margin
+    assert campus.styles["Normal"].font.size == Pt(9)
+    assert campus.sections[0].top_margin <= Cm(1.3)

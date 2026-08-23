@@ -127,3 +127,20 @@ async def test_followup_questions_are_limited_deduplicated_and_private() -> None
     assert len({question.topic for question in result}) == 5
     assert "private@example.com" not in provider.prompts[0]
     assert "13800000000" not in provider.prompts[0]
+
+
+@pytest.mark.anyio
+async def test_campus_suggestion_prompt_requires_one_page_without_truncation() -> None:
+    """Catches campus optimization prompts that omit the approved one-page policy."""
+    provider = FakeProvider([ResumePatch()])
+
+    await suggest_resume_patch(
+        provider,
+        valid_analysis(),
+        ResumeDocument.blank(),
+        facts=[],
+        application_type="campus",
+    )
+
+    assert "一页 A4" in provider.prompts[0]
+    assert "不得截断" in provider.prompts[0]

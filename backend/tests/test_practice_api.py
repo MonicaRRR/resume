@@ -40,7 +40,12 @@ def test_practice_session_is_saved_across_answer_roundtrip(tmp_path: Path) -> No
     )
     project = client.post(
         "/api/projects",
-        json={"title": "后端工程师", "company_name": "", "job_description": "负责 Python API"},
+        json={
+            "title": "后端工程师",
+            "company_name": "",
+            "application_type": "experienced",
+            "job_description": "负责 Python API",
+        },
     ).json()
     client.post(
         f"/api/projects/{project['id']}/resume/import",

@@ -8,7 +8,15 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-from resume_mvp.domain import Fact, JobAnalysis, JobProject, ResumeDocument, ResumeVersion, utc_now
+from resume_mvp.domain import (
+    ApplicationType,
+    Fact,
+    JobAnalysis,
+    JobProject,
+    ResumeDocument,
+    ResumeVersion,
+    utc_now,
+)
 
 
 _TEMPLATE_STYLES = {
@@ -19,18 +27,25 @@ _TEMPLATE_STYLES = {
 }
 
 
-def build_docx(resume: ResumeDocument, template_id: str) -> bytes:
+def build_docx(
+    resume: ResumeDocument,
+    template_id: str,
+    application_type: ApplicationType = "experienced",
+) -> bytes:
     style = _TEMPLATE_STYLES.get(template_id, _TEMPLATE_STYLES["clear-single"])
+    compact = application_type in {"campus", "internship"}
     document = Document()
     section = document.sections[0]
-    margin = Cm(style["margin"])
+    margin = Cm(min(style["margin"], 1.25) if compact else style["margin"])
     section.top_margin = section.bottom_margin = margin
     section.left_margin = section.right_margin = margin
 
     normal = document.styles["Normal"]
     normal.font.name = style["font"]
     normal._element.rPr.rFonts.set(qn("w:eastAsia"), style["font"])
-    normal.font.size = Pt(10)
+    normal.font.size = Pt(9 if compact else 10)
+    normal.paragraph_format.space_after = Pt(1 if compact else 4)
+    normal.paragraph_format.line_spacing = 1.0 if compact else 1.15
 
     title = document.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -49,7 +64,7 @@ def build_docx(resume: ResumeDocument, template_id: str) -> bytes:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     if resume.basics.summary.value:
-        _heading(document, "个人简介", style)
+        _heading(document, "个人简介", style, compact=compact)
         document.add_paragraph(resume.basics.summary.value)
 
     section_order = list(resume.section_order)
@@ -59,37 +74,37 @@ def build_docx(resume: ResumeDocument, template_id: str) -> bytes:
 
     for section_name in section_order:
         if section_name == "work_experience" and resume.work_experience:
-            _heading(document, "工作经历", style)
+            _heading(document, "工作经历", style, compact=compact)
             for item in resume.work_experience:
                 _entry_title(document, item.company, item.title, item.start_date, item.end_date, style)
                 _bullets(document, [bullet.value for bullet in item.bullets])
         elif section_name == "projects" and resume.projects:
-            _heading(document, "项目经历", style)
+            _heading(document, "项目经历", style, compact=compact)
             for item in resume.projects:
                 _entry_title(document, item.name, item.role, item.start_date, item.end_date, style)
                 _bullets(document, [bullet.value for bullet in item.bullets])
         elif section_name == "education" and resume.education:
-            _heading(document, "教育经历", style)
+            _heading(document, "教育经历", style, compact=compact)
             for item in resume.education:
                 detail = " · ".join(value for value in [item.degree, item.field] if value)
                 _entry_title(document, item.institution, detail, item.start_date, item.end_date, style)
                 _bullets(document, [highlight.value for highlight in item.highlights])
         elif section_name == "skills" and resume.skills:
-            _heading(document, "专业技能", style)
+            _heading(document, "专业技能", style, compact=compact)
             for group in resume.skills:
                 document.add_paragraph(
                     f"{group.name}：{'、'.join(item.value for item in group.items)}"
                 )
         elif section_name == "custom_sections":
             for custom in resume.custom_sections:
-                _heading(document, custom.title, style)
+                _heading(document, custom.title, style, compact=compact)
                 _bullets(document, [item.value for item in custom.items])
 
     if resume.certificates:
-        _heading(document, "证书", style)
+        _heading(document, "证书", style, compact=compact)
         _bullets(document, [entry.name for entry in resume.certificates])
     if resume.awards:
-        _heading(document, "奖项", style)
+        _heading(document, "奖项", style, compact=compact)
         _bullets(document, [entry.name for entry in resume.awards])
 
     output = BytesIO()
@@ -105,6 +120,7 @@ def build_resume_json(project: JobProject, version: ResumeVersion) -> bytes:
             "id": project.id,
             "title": project.title,
             "company_name": project.company_name,
+            "application_type": project.application_type,
             "job_description": project.job_description,
             "selected_template_id": project.selected_template_id,
         },
@@ -146,11 +162,17 @@ def build_codex_handoff(
     )
 
 
-def _heading(document: Document, text: str, style: dict) -> None:
+def _heading(document: Document, text: str, style: dict, *, compact: bool = False) -> None:
     paragraph = document.add_paragraph()
-    paragraph.paragraph_format.space_before = Pt(10)
-    paragraph.paragraph_format.space_after = Pt(4)
-    _style_run(paragraph.add_run(text), style["font"], 12, style["accent"], bold=True)
+    paragraph.paragraph_format.space_before = Pt(6 if compact else 10)
+    paragraph.paragraph_format.space_after = Pt(2 if compact else 4)
+    _style_run(
+        paragraph.add_run(text),
+        style["font"],
+        10.5 if compact else 12,
+        style["accent"],
+        bold=True,
+    )
 
 
 def _entry_title(

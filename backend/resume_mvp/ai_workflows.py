@@ -7,6 +7,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from resume_mvp.domain import (
+    ApplicationType,
     Fact,
     FollowupQuestion,
     JobAnalysis,
@@ -96,7 +97,13 @@ async def suggest_resume_patch(
     analysis: JobAnalysis,
     resume: ResumeDocument,
     facts: list[Fact],
+    application_type: ApplicationType = "experienced",
 ) -> ResumePatch:
+    page_constraint = (
+        "校招/实习版本必须优化为一页 A4：使用更紧凑表达，优先合并重复内容；不得截断文字、隐藏经历或删除事实。"
+        if application_type in {"campus", "internship"}
+        else "社招版本允许自然分页，保留高价值经历。"
+    )
     prompt = _prompt(
         task="生成待用户审阅的简历补丁",
         constraints=[
@@ -105,6 +112,7 @@ async def suggest_resume_patch(
             "使用 JSON Pointer 路径",
             "before 必须与输入简历中的当前值完全一致",
             "不要修改姓名、电话或邮箱",
+            page_constraint,
         ],
         data={
             "job_analysis": analysis.model_dump(mode="json"),
