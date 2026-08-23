@@ -5,6 +5,9 @@ web/node_modules/
 web/dist/
 web/playwright-report/
 web/test-results/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 __pycache__/
 .pytest_cache/
 .DS_Store
