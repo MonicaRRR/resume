@@ -14,6 +14,7 @@
 
 - MVP is a local single-user Web application and requires no account.
 - MVP UI, generated content, fixtures, and errors are Chinese-only.
+- Every project has `application_type`: `campus`, `internship`, or `experienced`; campus/internship target exactly one A4 page with compact layout and export blocking on overflow, while experienced resumes may paginate naturally.
 - Supported uploads are DOCX, text-based PDF, and TXT; scanned-PDF OCR is excluded.
 - Implement OpenAI-compatible `/v1/chat/completions` and local Codex CLI providers; keep the local-model interface only, with no Qwen runtime integration.
 - AI may rewrite only facts provided by upload, questionnaire, or manual entry; missing facts become questions.
@@ -42,6 +43,7 @@
 │   │   ├── ingestion.py              # TXT/DOCX/PDF import and quality report
 │   │   ├── patches.py                # patch validation/application/version helpers
 │   │   ├── matching.py               # explainable JD coverage calculation
+│   │   ├── page_policy.py            # one-page estimates and compact layout tokens
 │   │   ├── providers/
 │   │   │   ├── base.py               # provider protocol and provider errors
 │   │   │   ├── openai_compatible.py  # HTTP chat-completions adapter
@@ -707,6 +709,71 @@ git commit -m "feat: add interview and written practice"
 
 ---
 
+### Task 9A: Application type and one-page policy
+
+**Files:**
+- Modify: `backend/resume_mvp/domain.py`
+- Modify: `backend/resume_mvp/tables.py`
+- Modify: `backend/resume_mvp/repositories.py`
+- Create: `backend/resume_mvp/page_policy.py`
+- Modify: `backend/resume_mvp/api/projects.py`
+- Modify: `backend/resume_mvp/api/exports.py`
+- Modify: `backend/resume_mvp/exports.py`
+- Create: `backend/tests/test_page_policy.py`
+- Modify: `backend/tests/test_project_api.py`
+- Modify: `backend/tests/test_exports.py`
+- Modify: `backend/tests/test_export_api.py`
+
+**Interfaces:**
+- Produces: `ApplicationType = Literal["campus", "internship", "experienced"]` on every `JobProject`.
+- Produces: `evaluate_page_policy(resume, application_type) -> PagePolicyResult` with `compact`, `max_pages`, `estimated_units`, `capacity_units`, `overflow`.
+
+- [ ] **Step 1: Write failing page-policy and project-roundtrip tests**
+
+```python
+def test_campus_and_internship_use_compact_one_page_policy():
+    assert evaluate_page_policy(short_resume, "campus").max_pages == 1
+    assert evaluate_page_policy(short_resume, "internship").compact is True
+
+def test_experienced_resume_never_blocks_for_length():
+    result = evaluate_page_policy(long_resume, "experienced")
+    assert result.max_pages is None
+    assert result.overflow is False
+
+def test_project_api_roundtrips_application_type(client):
+    response = client.post("/api/projects", json={
+        "title":"实习申请", "company_name":"", "application_type":"internship", "job_description":"参与 Python API 开发"
+    })
+    assert response.json()["application_type"] == "internship"
+```
+
+- [ ] **Step 2: Run tests and verify RED**
+
+Run: `cd backend && uv run pytest tests/test_page_policy.py tests/test_project_api.py -q`
+
+Expected: FAIL because projects and policy do not contain `application_type`.
+
+- [ ] **Step 3: Implement persistence and deterministic capacity policy**
+
+Count visible Chinese/ASCII characters plus fixed costs for headings and entries. Campus/internship use compact tokens and a hand-checked one-page capacity derived from the built-in A4 preview; experienced resumes return unlimited capacity. The estimator never removes or truncates content.
+
+- [ ] **Step 4: Apply policy to prompts and exports**
+
+Add the application type and one-page constraint to resume-suggestion prompts. `build_docx` accepts application type and uses compact margins, 9-point body text, tighter paragraph spacing, and compact headings for campus/internship. The DOCX route returns `422 RESUME_OVERFLOW` before generation when the deterministic estimate exceeds one page.
+
+- [ ] **Step 5: Verify policy, API, exports, and commit**
+
+Run: `cd backend && uv run pytest tests/test_page_policy.py tests/test_project_api.py tests/test_exports.py tests/test_export_api.py -q`
+
+Expected: one-page rules and all existing export/API behavior pass.
+
+```bash
+git add backend docs/superpowers
+git commit -m "feat: enforce compact one-page campus resumes"
+```
+
+---
+
 ### Task 10: Frontend types, API client, routing, and project home
 
 **Files:**
@@ -744,6 +811,12 @@ test("公司名称可以留空", async () => {
   await user.click(screen.getByRole("button", { name: "创建求职项目" }));
   expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ company_name: "" }));
 });
+
+test("创建项目必须选择校招、实习或社招", async () => {
+  render(<ProjectForm onCreate={onCreate} />);
+  await user.click(screen.getByRole("radio", { name: "校招" }));
+  expect(screen.getByRole("radio", { name: "校招" })).toBeChecked();
+});
 ```
 
 - [ ] **Step 2: Run frontend tests and verify RED**
@@ -758,7 +831,7 @@ Parse every response through a named Zod schema. Convert API `detail.message`, n
 
 - [ ] **Step 4: Implement project home and provider status**
 
-Show project cards with company, role, update time, and active stage. Provide an empty state with `创建第一份针对岗位的简历`. Provider status distinguishes unconfigured, connected, unavailable, and currently testing.
+Show project cards with company, role, application type, update time, and active stage. Provide an empty state with `创建第一份针对岗位的简历`. Provider status distinguishes unconfigured, connected, unavailable, and currently testing.
 
 - [ ] **Step 5: Verify page tests and commit**
 
@@ -812,6 +885,13 @@ test("切换模板不改变简历内容", async () => {
   expect(screen.getByText("张宁")).toBeInTheDocument();
   expect(screen.getByText("使用 Python 开发 API")).toBeInTheDocument();
 });
+
+test("校招简历溢出一页时阻止导出但不截断内容", () => {
+  render(<ResumePreview resume={longResume} applicationType="campus" measuredOverflow />);
+  expect(screen.getByText("当前内容超过一页")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "打印或保存 PDF" })).toBeDisabled();
+  expect(screen.getByText(longResume.work_experience.at(-1)!.company)).toBeVisible();
+});
 ```
 
 - [ ] **Step 2: Run workbench component tests and verify RED**
@@ -828,7 +908,7 @@ Left column stages are `岗位信息`, `个人事实`, `匹配分析`, `简历�
 
 - [ ] **Step 4: Implement four content-stable template renderers**
 
-All templates consume the same `ResumeDocument`. `clear-single` is strict single column; `pro-double` reserves a narrow skills rail; `project-focus` emphasizes project titles and outcomes; `career-depth` emphasizes chronological work history. Imported layout tokens override font/accent/spacing only when valid.
+All templates consume the same `ResumeDocument`. `clear-single` is strict single column; `pro-double` reserves a narrow skills rail; `project-focus` emphasizes project titles and outcomes; `career-depth` emphasizes chronological work history. Imported layout tokens override font/accent/spacing only when valid. Campus and internship projects apply compact font, gap, line-height, and margin tokens; experienced projects render natural A4 page breaks.
 
 Export `recommendTemplate(resume, analysis)` from `registry.tsx`: choose `project-focus` when project evidence outweighs work evidence, `pro-double` when categorized skills exceed eight, `career-depth` when work entries exceed three, otherwise `clear-single`. Show the recommendation reason and keep manual selection authoritative.
 
@@ -836,7 +916,7 @@ Export `recommendTemplate(resume, analysis)` from `registry.tsx`: choose `projec
 
 Use paper white `#F7F8FA`, ink `#172033`, cobalt `#2457D6`, review red `#C9364F`, muted slate `#687386`, and line `#DDE2EA`. UI type uses PingFang SC/Noto Sans CJK/system sans; preview headings use Songti SC/Noto Serif CJK/system serif. Use squared paper sheets, restrained 8px controls, visible 3px keyboard focus, reduced-motion media query, mobile stage tabs, and `@page { size: A4; margin: 0; }` with navigation hidden in print.
 
-Version history buttons call the activate-version API after confirmation. The export stage provides `打印或保存 PDF`, `下载 DOCX`, `下载 JSON`, `复制 Codex 上下文`, and `下载 Codex 上下文`; printing calls `window.print()` and downloads use response blobs without opening user data in a new remote tab.
+Version history buttons call the activate-version API after confirmation. Use `ResizeObserver` plus A4 content bounds to measure the preview. Campus/internship overflow keeps every section visible, marks the largest sections, shows `生成一页优化建议`, and disables PDF/DOCX controls; experienced resumes paginate naturally. The export stage provides `打印或保存 PDF`, `下载 DOCX`, `下载 JSON`, `复制 Codex 上下文`, and `下载 Codex 上下文`; printing calls `window.print()` and downloads use response blobs without opening user data in a new remote tab.
 
 - [ ] **Step 6: Verify component tests, accessibility queries, and print build**
 
