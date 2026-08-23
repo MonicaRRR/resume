@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import type { JobAnalysis, ResumeDocument, SourcedText } from "../types";
 
@@ -63,11 +63,22 @@ function ContactLine({ resume }: { resume: ResumeDocument }) {
 
 
 export function TemplateResume({ resume, templateId }: { resume: ResumeDocument; templateId: string }) {
-  const ordered = templateId === "project-focus"
+  const preserveImported = resume.layout_profile.imported && templateId === "clear-single";
+  const effectiveTemplateId = preserveImported && resume.layout_profile.columns === 2 ? "pro-double" : templateId;
+  const ordered = effectiveTemplateId === "project-focus"
     ? ["projects", "education", "work", "skills"]
-    : templateId === "pro-double"
+    : effectiveTemplateId === "pro-double"
       ? ["summary", "work", "projects", "education", "skills"]
       : ["summary", "education", "work", "projects", "skills"];
+  const importedStyle: CSSProperties & Record<`--${string}`, string | number> = {};
+  if (preserveImported) {
+    const profile = resume.layout_profile;
+    if (profile.font_family.trim()) importedStyle.fontFamily = profile.font_family.trim();
+    if (profile.heading_font_family.trim()) importedStyle["--resume-heading-font"] = profile.heading_font_family.trim();
+    if (/^#[0-9a-f]{6}$/i.test(profile.accent_color)) importedStyle["--resume-accent"] = profile.accent_color;
+    if (profile.base_font_size && profile.base_font_size >= 8 && profile.base_font_size <= 14) importedStyle.fontSize = `${profile.base_font_size}px`;
+    if (profile.line_height && profile.line_height >= 1.1 && profile.line_height <= 1.8) importedStyle.lineHeight = String(profile.line_height);
+  }
 
   const sections: Record<string, ReactNode> = {
     summary: resume.basics.summary.value ? (
@@ -108,7 +119,7 @@ export function TemplateResume({ resume, templateId }: { resume: ResumeDocument;
   };
 
   return (
-    <article className={`resume-paper resume-sheet template-${templateId}`}>
+    <article className={`resume-paper resume-sheet template-${effectiveTemplateId}`} style={importedStyle}>
       <header className="resume-header">
         <div>
           <h1>{resume.basics.name || "你的姓名"}</h1>

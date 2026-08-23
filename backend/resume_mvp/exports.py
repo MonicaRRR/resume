@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+import re
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -32,7 +33,17 @@ def build_docx(
     template_id: str,
     application_type: ApplicationType = "experienced",
 ) -> bytes:
-    style = _TEMPLATE_STYLES.get(template_id, _TEMPLATE_STYLES["clear-single"])
+    style = dict(_TEMPLATE_STYLES.get(template_id, _TEMPLATE_STYLES["clear-single"]))
+    body_size = 10.0
+    if resume.layout_profile.imported and template_id == "clear-single":
+        imported_font = resume.layout_profile.font_family.strip()
+        imported_accent = resume.layout_profile.accent_color.strip()
+        if imported_font and len(imported_font) <= 100:
+            style["font"] = imported_font
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", imported_accent):
+            style["accent"] = imported_accent[1:].upper()
+        if resume.layout_profile.base_font_size is not None:
+            body_size = min(max(resume.layout_profile.base_font_size, 8), 12)
     compact = application_type in {"campus", "internship"}
     document = Document()
     section = document.sections[0]
@@ -43,7 +54,7 @@ def build_docx(
     normal = document.styles["Normal"]
     normal.font.name = style["font"]
     normal._element.rPr.rFonts.set(qn("w:eastAsia"), style["font"])
-    normal.font.size = Pt(9 if compact else 10)
+    normal.font.size = Pt(9 if compact else body_size)
     normal.paragraph_format.space_after = Pt(1 if compact else 4)
     normal.paragraph_format.line_spacing = 1.0 if compact else 1.15
 

@@ -8,6 +8,7 @@ from resume_mvp.domain import (
     Fact,
     JobAnalysis,
     JobProject,
+    LayoutProfile,
     ResumeDocument,
     ResumeVersion,
     SourcedText,
@@ -102,3 +103,22 @@ def test_campus_docx_uses_compact_layout_tokens() -> None:
     assert campus.sections[0].top_margin < experienced.sections[0].top_margin
     assert campus.styles["Normal"].font.size == Pt(9)
     assert campus.sections[0].top_margin <= Cm(1.3)
+
+
+def test_docx_export_prefers_valid_imported_template_tokens() -> None:
+    """Catches an uploaded DOCX template being discarded during export."""
+    resume = sample_resume()
+    resume.layout_profile = LayoutProfile(
+        source_kind="docx",
+        imported=True,
+        font_family="FangSong",
+        heading_font_family="FangSong",
+        accent_color="#7A3E8E",
+        base_font_size=11,
+    )
+
+    document = Document(BytesIO(build_docx(resume, "clear-single", "experienced")))
+
+    assert document.styles["Normal"].font.name == "FangSong"
+    assert document.styles["Normal"].font.size == Pt(11)
+    assert str(document.paragraphs[0].runs[0].font.color.rgb) == "7A3E8E"

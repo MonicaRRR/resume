@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,6 +12,7 @@ from resume_mvp.api.providers import router as providers_router
 from resume_mvp.config import settings
 from resume_mvp.database import create_database
 from resume_mvp.providers import AIProvider
+from resume_mvp.providers.e2e import E2EProvider
 from resume_mvp.repositories import ProjectRepository
 
 
@@ -21,9 +23,14 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="中文 AI 简历工作台", version="0.1.0")
     root = data_dir or settings.data_dir
+    default_test_kind = ""
+    providers = test_providers
+    if providers is None and os.environ.get("RESUME_MVP_TEST_PROVIDER") == "1":
+        providers = {"test": E2EProvider()}
+        default_test_kind = "test"
     app.state.services = AppServices(
         repository=ProjectRepository(create_database(root / "resume.db")),
-        providers=ProviderRegistry(test_providers),
+        providers=ProviderRegistry(providers, default_test_kind=default_test_kind),
     )
 
     @app.get("/api/health")

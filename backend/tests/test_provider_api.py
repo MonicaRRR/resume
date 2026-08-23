@@ -39,3 +39,16 @@ def test_codex_requires_explicit_privacy_confirmation(tmp_path: Path) -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "CODEX_CONSENT_REQUIRED"
+
+
+def test_e2e_provider_requires_explicit_environment_flag(tmp_path: Path, monkeypatch) -> None:
+    """Catches a deterministic test model becoming available in normal runs."""
+    monkeypatch.delenv("RESUME_MVP_TEST_PROVIDER", raising=False)
+    normal = TestClient(create_app(data_dir=tmp_path / "normal"))
+    assert normal.get("/api/settings/providers").json()["configured"] is False
+
+    monkeypatch.setenv("RESUME_MVP_TEST_PROVIDER", "1")
+    enabled = TestClient(create_app(data_dir=tmp_path / "e2e"))
+    state = enabled.get("/api/settings/providers").json()
+    assert state["kind"] == "test"
+    assert state["configured"] is True

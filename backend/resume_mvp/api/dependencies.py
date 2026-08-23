@@ -27,9 +27,14 @@ class ProviderPublicState:
 
 
 class ProviderRegistry:
-    def __init__(self, test_providers: Mapping[str, AIProvider] | None = None) -> None:
+    def __init__(
+        self,
+        test_providers: Mapping[str, AIProvider] | None = None,
+        *,
+        default_test_kind: str = "",
+    ) -> None:
         self._test_providers = dict(test_providers or {})
-        self._kind = ""
+        self._kind = default_test_kind if default_test_kind in self._test_providers else ""
         self._base_url = ""
         self._api_key = ""
         self._model = ""
@@ -38,7 +43,7 @@ class ProviderRegistry:
         self._codex_confirmed = False
 
     def public_state(self) -> ProviderPublicState:
-        configured = (
+        configured = self._kind in self._test_providers or (
             self._kind == "openai-compatible"
             and bool(self._base_url and self._api_key and self._model)
         ) or (self._kind == "codex" and self._codex_confirmed)
