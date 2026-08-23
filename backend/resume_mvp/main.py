@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from resume_mvp.api.dependencies import AppServices, ProviderRegistry
+from resume_mvp.api.exports import router as exports_router
 from resume_mvp.api.projects import router as projects_router
 from resume_mvp.api.providers import router as providers_router
 from resume_mvp.config import settings
@@ -30,6 +31,7 @@ def create_app(
 
     app.include_router(projects_router)
     app.include_router(providers_router)
+    app.include_router(exports_router)
     return app
 
 
