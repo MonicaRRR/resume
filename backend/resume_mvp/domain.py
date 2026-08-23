@@ -151,6 +151,20 @@ class JobAnalysis(BaseModel):
     written_topics: list[str] = Field(default_factory=list)
 
 
+class MatchItem(BaseModel):
+    requirement_id: str
+    requirement: str
+    status: Literal["已有证据", "证据较弱", "没有证据"]
+    fact_ids: list[str] = Field(default_factory=list)
+    excerpts: list[str] = Field(default_factory=list)
+    weight: float = 1.0
+
+
+class MatchReport(BaseModel):
+    coverage: float = Field(ge=0, le=1)
+    items: list[MatchItem] = Field(default_factory=list)
+
+
 class ResumePatchOperation(BaseModel):
     id: str = Field(default_factory=new_id)
     op: Literal["replace", "reorder"] = "replace"
