@@ -181,6 +181,19 @@ class ResumePatch(BaseModel):
     operations: list[ResumePatchOperation] = Field(default_factory=list)
 
 
+class FollowupQuestion(BaseModel):
+    id: str = Field(default_factory=new_id)
+    question: str
+    topic: str
+    requirement_id: str = ""
+    rationale: str = ""
+    skippable: bool = True
+
+
+class QuestionList(BaseModel):
+    items: list[FollowupQuestion] = Field(default_factory=list)
+
+
 class ResumeVersion(BaseModel):
     id: str
     project_id: str
