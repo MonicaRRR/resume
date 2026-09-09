@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import fitz
+import pytest
 
-from resume_mvp.domain import ProjectEntry, ResumeDocument, SkillGroup, SourcedText
+from resume_mvp.domain import CustomSection, ProjectEntry, ResumeDocument, SkillGroup, SourcedText
+from resume_mvp.exports import build_docx
 from resume_mvp.layout_analysis import analyze_pdf_layout
+from resume_mvp.preview import convert_docx_to_pdf
 
 
 def resume_with_project_bullet(bullet: str) -> ResumeDocument:
@@ -41,6 +44,17 @@ def two_page_pdf() -> bytes:
     document = fitz.open()
     document.new_page()
     document.new_page()
+    payload = document.tobytes()
+    document.close()
+    return payload
+
+
+def two_page_pdf_with_orphan_heading(heading: str) -> bytes:
+    document = fitz.open()
+    first_page = document.new_page()
+    _insert_line(first_page, heading, y=760, width=80)
+    second_page = document.new_page()
+    _insert_line(second_page, "下一页的正文内容", y=100, width=140)
     payload = document.tobytes()
     document.close()
     return payload
@@ -129,5 +143,32 @@ def test_campus_two_page_pdf_is_severe_overflow() -> None:
 
     assert any(
         item.kind == "one_page_overflow" and item.severity == "severe"
+        for item in report.issues
+    )
+
+
+@pytest.mark.integration
+def test_detects_project_bullet_tail_from_real_exported_pdf() -> None:
+    resume = ResumeDocument(
+        projects=[ProjectEntry(name="项目名称", bullets=[SourcedText(value="测" * 100)])]
+    )
+    pdf = convert_docx_to_pdf(build_docx(resume, "clear-single", "experienced"))
+
+    report = analyze_pdf_layout(pdf, resume, "experienced")
+
+    issue = next(item for item in report.issues if item.kind == "short_tail")
+    assert issue.target_path == "/projects/0/bullets/0"
+    assert issue.measured_ratio is not None
+    assert issue.measured_ratio < 0.25
+
+
+def test_detects_custom_section_heading_orphaned_on_first_page() -> None:
+    title = "开源贡献"
+    resume = ResumeDocument(custom_sections=[CustomSection(title=title)])
+
+    report = analyze_pdf_layout(two_page_pdf_with_orphan_heading(title), resume, "experienced")
+
+    assert any(
+        item.kind == "orphan_heading" and item.page == 1 and item.text_excerpt == title
         for item in report.issues
     )

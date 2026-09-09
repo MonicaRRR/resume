@@ -85,7 +85,12 @@ def analyze_pdf_layout(
         document.close()
 
     issues = _short_tail_issues(pages, _resume_text_paths(resume), threshold=_SHORT_TAIL_THRESHOLD)
-    issues.extend(_orphan_heading_issues(pages))
+    headings = _SECTION_HEADINGS | {
+        _normalise_text(section.title)
+        for section in resume.custom_sections
+        if _normalise_text(section.title)
+    }
+    issues.extend(_orphan_heading_issues(pages, headings))
     issues.extend(_sparse_last_page_issues(pages))
     if application_type in {"campus", "internship"} and len(pages) > 1:
         issues.append(
@@ -154,39 +159,55 @@ def _short_tail_issues(
     issues: list[LayoutIssue] = []
     for page in pages:
         for paragraph in page.paragraphs:
-            if len(paragraph.lines) < 2 or _is_non_body_text(paragraph.text):
-                continue
-            target_path = paths.get(_normalise_text(paragraph.text))
-            if not target_path:
-                continue
-            available_width = max(line.width for line in paragraph.lines)
-            if available_width <= 0:
-                continue
-            ratio = paragraph.lines[-1].width / available_width
-            if ratio >= threshold:
-                continue
-            issues.append(
-                LayoutIssue(
-                    kind="short_tail",
-                    severity="warning",
-                    page=page.number,
-                    target_path=target_path,
-                    text_excerpt=paragraph.text,
-                    measured_ratio=ratio,
-                    message="正文最后一行过短，建议调整措辞或换行",
+            for target_path, editable in _editable_paragraphs(paragraph, paths):
+                available_width = max(line.width for line in editable.lines)
+                if available_width <= 0:
+                    continue
+                ratio = editable.lines[-1].width / available_width
+                if ratio >= threshold:
+                    continue
+                issues.append(
+                    LayoutIssue(
+                        kind="short_tail",
+                        severity="warning",
+                        page=page.number,
+                        target_path=target_path,
+                        text_excerpt=editable.text,
+                        measured_ratio=ratio,
+                        message="正文最后一行过短，建议调整措辞或换行",
+                    )
                 )
-            )
     return issues
 
 
-def _orphan_heading_issues(pages: list[_PageGeometry]) -> list[LayoutIssue]:
+def _editable_paragraphs(
+    paragraph: _Paragraph,
+    paths: dict[str, str],
+) -> list[tuple[str, _Paragraph]]:
+    matches: list[tuple[str, _Paragraph]] = []
+    for start, line in enumerate(paragraph.lines):
+        if not _normalise_text(line.text):
+            continue
+        for end in range(start + 2, len(paragraph.lines) + 1):
+            lines = paragraph.lines[start:end]
+            target_path = paths.get(_normalise_text("".join(item.text for item in lines)))
+            if target_path:
+                matches.append((target_path, _Paragraph(text="".join(item.text for item in lines), lines=lines)))
+                break
+    return matches
+
+
+def _orphan_heading_issues(
+    pages: list[_PageGeometry],
+    headings: set[str],
+) -> list[LayoutIssue]:
     issues: list[LayoutIssue] = []
     for index, page in enumerate(pages[:-1]):
         lines = [line for paragraph in page.paragraphs for line in paragraph.lines]
         if not lines:
             continue
         last_line = max(lines, key=lambda line: line.y1)
-        if _normalise_text(last_line.text) not in _SECTION_HEADINGS:
+        if _normalise_text(last_line.text) not in headings:
             continue
         if last_line.y1 < page.height * 0.6 or not pages[index + 1].paragraphs:
             continue
