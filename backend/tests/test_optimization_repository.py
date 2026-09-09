@@ -2,7 +2,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from resume_mvp.database import create_database
 from resume_mvp.domain import ResumeDocument, SkillGroup, SourcedText
@@ -79,6 +81,17 @@ def test_step_attempts_are_immutable(repository: ProjectRepository, seeded_proje
     assert second.attempt == 2
     assert [step.attempt for step in repository.list_optimization_steps(seeded_run.id)] == [1, 2]
 
+    with pytest.raises(IntegrityError):
+        repository.save_optimization_step(
+            seeded_run.id, "analysis", 0, 1, "changed-hash", {"ok": False}, "failed"
+        )
+
+    persisted = repository.list_optimization_steps(seeded_run.id)
+    assert [(step.attempt, step.input_hash, step.output, step.status) for step in persisted] == [
+        (1, "hash", {"ok": True}, "succeeded"),
+        (2, "hash", {"ok": True}, "succeeded"),
+    ]
+
     with repository._sessions() as session:
         assert session.query(OptimizationStepRecord).count() == 2
 
@@ -109,6 +122,65 @@ def test_reuses_successful_equivalent_checkpoint_for_24_hours(repository: Projec
     assert reusable is not None
     assert reusable.run_id == source.id
     assert reusable.output == {"summary": "cached"}
+
+
+def test_checkpoint_reuse_requires_scope_and_rejects_cross_project_match(
+    repository: ProjectRepository, seeded_project
+) -> None:
+    other_project = repository.create(
+        title="另一个项目",
+        company_name="另一家公司",
+        application_type="experienced",
+        job_description="负责数据平台",
+    )
+    source = make_run(seeded_project.id)
+    source.input_version_id = seeded_project.active_resume_version_id
+    source_run = repository.create_optimization_run(source)
+    target = make_run(other_project.id)
+    target.input_version_id = other_project.active_resume_version_id
+    target_run = repository.create_optimization_run(target)
+    now = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+    repository.save_optimization_step(
+        source_run.id,
+        "analysis",
+        0,
+        1,
+        "same-input",
+        {"summary": "cached"},
+        "succeeded",
+        created_at=now - timedelta(hours=1),
+    )
+
+    with pytest.raises(ValueError, match="target run or project scope"):
+        repository.find_reusable_optimization_step(
+            kind="analysis", iteration=0, input_hash="same-input", now=now
+        )
+
+    assert repository.find_reusable_optimization_step(
+        target_run.id, "analysis", 0, "same-input", now=now
+    ) is None
+
+
+def test_create_revalidates_mutated_optimization_run(repository: ProjectRepository, seeded_project) -> None:
+    run = make_run(seeded_project.id)
+    run.input_version_id = seeded_project.active_resume_version_id
+    run.status = "not-a-status"  # type: ignore[assignment]
+
+    with pytest.raises(ValidationError):
+        repository.create_optimization_run(run)
+
+
+def test_save_layout_report_revalidates_mutated_report(
+    repository: ProjectRepository, seeded_project
+) -> None:
+    run = make_run(seeded_project.id)
+    run.input_version_id = seeded_project.active_resume_version_id
+    seeded_run = repository.create_optimization_run(run)
+    report = LayoutReport()
+    report.page_count = 0
+
+    with pytest.raises(ValidationError):
+        repository.save_layout_report(seeded_run.id, 0, report)
 
 
 @pytest.mark.parametrize(

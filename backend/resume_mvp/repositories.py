@@ -306,7 +306,8 @@ class ProjectRepository:
 
     def create_optimization_run(self, run: OptimizationRun) -> OptimizationRun:
         """Persist a validated, frozen optimization input and return its payload."""
-        validated = OptimizationRun.model_validate(run)
+        run_payload = run.model_dump(mode="python") if isinstance(run, OptimizationRun) else run
+        validated = OptimizationRun.model_validate(run_payload)
         with self._sessions() as session:
             project = session.get(ProjectRecord, validated.project_id)
             if project is None:
@@ -387,23 +388,20 @@ class ProjectRepository:
     def find_reusable_optimization_step(
         self,
         run_id: str | None = None,
-        kind: OptimizationStepKind | int | None = None,
-        iteration: int | str | None = None,
+        kind: OptimizationStepKind | None = None,
+        iteration: int | None = None,
         input_hash: str | None = None,
         *,
+        project_id: str | None = None,
         now: datetime | None = None,
     ) -> OptimizationStepRecord | None:
         """Find a successful equivalent checkpoint created within the last 24 hours.
 
-        The three-argument form (kind, iteration, input_hash) is accepted for callers
-        that do not need project scoping. Passing a run ID scopes reuse to that run's
-        project while still allowing a checkpoint from another run.
+        Reuse always requires either a target run or an explicit project scope. A
+        checkpoint from another run is eligible only within that same project.
         """
-        if input_hash is None:
-            input_hash = str(iteration) if iteration is not None else None
-            iteration = kind
-            kind = run_id
-            run_id = None
+        if (run_id is None) == (project_id is None):
+            raise ValueError("target run or project scope is required")
         if not isinstance(kind, str) or not isinstance(iteration, int) or not input_hash:
             raise ValueError("kind, iteration, and input_hash are required")
 
@@ -412,10 +410,11 @@ class ProjectRepository:
             current_time = current_time.replace(tzinfo=timezone.utc)
         cutoff = current_time - timedelta(hours=24)
         with self._sessions() as session:
-            project_id = None
             if run_id is not None:
                 run = self._require_optimization_run(session, run_id)
                 project_id = run.project_id
+            elif session.get(ProjectRecord, project_id) is None:
+                raise ProjectNotFoundError(project_id)
             query = (
                 select(OptimizationStepRecord)
                 .join(
@@ -434,8 +433,7 @@ class ProjectRepository:
                     OptimizationStepRecord.attempt.desc(),
                 )
             )
-            if project_id is not None:
-                query = query.where(OptimizationRunRecord.project_id == project_id)
+            query = query.where(OptimizationRunRecord.project_id == project_id)
             return session.scalars(query).first()
 
     def list_optimization_steps(
@@ -469,7 +467,10 @@ class ProjectRepository:
         *,
         created_at: datetime | None = None,
     ) -> LayoutReport:
-        validated = LayoutReport.model_validate(report)
+        report_payload = (
+            report.model_dump(mode="python") if isinstance(report, LayoutReport) else report
+        )
+        validated = LayoutReport.model_validate(report_payload)
         with self._sessions() as session:
             self._require_optimization_run(session, run_id)
             record = session.scalar(

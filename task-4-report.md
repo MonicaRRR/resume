@@ -34,3 +34,26 @@ The repository records use SQLite-compatible JSON and timestamp columns. Existin
 ## Commit
 
 `feat: persist optimization loop checkpoints` (final commit on this worktree)
+
+## Review fix round 1
+
+Addressed the three requested review findings:
+
+- Checkpoint reuse now requires a target run or explicit project scope and always filters by that project; no-scope and cross-project matches are rejected.
+- `OptimizationRun` and `LayoutReport` are serialized before validation so in-place mutations cannot bypass Pydantic constraints.
+- The immutable-attempt test repeats the exact same key, asserts rejection, and verifies the original row remains unchanged while retaining the 1/2 attempt ordering test.
+
+Verification:
+
+```text
+uv run pytest tests/test_optimization_repository.py -v
+12 passed
+
+uv run pytest tests/test_optimization_repository.py tests/test_repositories.py tests/test_health.py -v
+15 passed
+
+git diff --check
+no output
+```
+
+Fix commit: `fix: tighten optimization checkpoint persistence invariants` (final commit on this worktree)
