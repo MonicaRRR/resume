@@ -16,8 +16,22 @@ def test_blank_resume_has_stable_chinese_section_order() -> None:
 
     assert resume.section_order == [
         "basics",
-        "work_experience",
-        "projects",
         "education",
         "skills",
+        "work_experience",
+        "projects",
+    ]
+
+
+def test_legacy_default_section_order_is_upgraded() -> None:
+    resume = ResumeDocument.model_validate({
+        "basics": {"name": "张宁"},
+        "section_order": ["basics", "work_experience", "projects", "education", "skills"],
+    })
+    assert resume.section_order == [
+        "basics",
+        "education",
+        "skills",
+        "work_experience",
+        "projects",
     ]

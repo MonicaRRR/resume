@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from resume_mvp.domain import (
     JobAnalysis,
     JobRequirement,
+    MatchReport,
+    PatchDiscussionResult,
     PracticeEvaluation,
     PracticeFeedback,
     PracticeQuestion,
@@ -45,6 +47,27 @@ class E2EProvider:
                     written_topics=["幂等设计"],
                 )
             )
+        if schema is MatchReport:
+            analysis = payload.get("job_analysis") or {}
+            requirements = analysis.get("requirements") or [
+                {"id": "req-core", "text": "Python API 开发", "weight": 2}
+            ]
+            items = []
+            for requirement in requirements:
+                req_id = str(requirement.get("id") or "req-core")
+                text = str(requirement.get("text") or "岗位要求")
+                weight = float(requirement.get("weight") or 1)
+                items.append(
+                    {
+                        "requirement_id": req_id,
+                        "requirement": text,
+                        "status": "已有证据",
+                        "fact_ids": [],
+                        "excerpts": ["使用 Python 开发 API"],
+                        "weight": weight,
+                    }
+                )
+            return schema.model_validate({"coverage": 1, "items": items})
         if schema is ResumePatch:
             resume = payload.get("resume", {})
             facts = payload.get("facts", [])
@@ -73,6 +96,35 @@ class E2EProvider:
                             "risk": "low",
                         }
                     ]
+                )
+            )
+        if schema is PatchDiscussionResult:
+            current = payload.get("current_operation", {})
+            user_message = str(payload.get("user_message", ""))
+            after_value = current.get("after", {})
+            if isinstance(after_value, dict):
+                base = str(after_value.get("value", "")).rstrip("。")
+                proposed_after = {**after_value, "value": f"{base}（按讨论微调）"}
+            else:
+                proposed_after = after_value
+            disagrees = any(token in user_message for token in ("不要改", "保持原样", "不同意"))
+            if disagrees:
+                return schema.model_validate(
+                    PatchDiscussionResult(
+                        reply="我建议先保留当前写法：它已经对齐了岗位关键词，改动收益不大。若你仍想改，请说明具体想保留/删掉的部分。",
+                        proposes_change=False,
+                        draft_operation=None,
+                    )
+                )
+            return schema.model_validate(
+                PatchDiscussionResult(
+                    reply="可以。我按你的意见准备了一版更克制的改写，确认后才会替换当前建议。",
+                    proposes_change=True,
+                    draft_operation={
+                        **current,
+                        "after": proposed_after,
+                        "reason": "已按讨论意见调整措辞（待你确认采用）",
+                    },
                 )
             )
         if schema is QuestionList:

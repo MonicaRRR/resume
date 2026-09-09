@@ -25,6 +25,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "integration: exercises optional local binaries such as LibreOffice",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from base64 import b64decode
 from io import BytesIO
 import json
 import re
@@ -18,9 +19,11 @@ from resume_mvp.domain import (
     ResumeVersion,
     utc_now,
 )
+from resume_mvp.layout_tidy import skill_lines_for_export, tidy_resume_for_layout
 
 
 _TEMPLATE_STYLES = {
+    "classic-cn": {"font": "SimSun", "accent": "111111", "margin": 1.6, "classic": True},
     "clear-single": {"font": "Microsoft YaHei", "accent": "2457D6", "margin": 1.7},
     "pro-double": {"font": "Microsoft YaHei", "accent": "214A72", "margin": 1.5},
     "project-focus": {"font": "Microsoft YaHei", "accent": "7A3E8E", "margin": 1.6},
@@ -33,49 +36,43 @@ def build_docx(
     template_id: str,
     application_type: ApplicationType = "experienced",
 ) -> bytes:
-    style = dict(_TEMPLATE_STYLES.get(template_id, _TEMPLATE_STYLES["clear-single"]))
-    body_size = 10.0
-    if resume.layout_profile.imported and template_id == "clear-single":
+    style = dict(_TEMPLATE_STYLES.get(template_id, _TEMPLATE_STYLES["classic-cn"]))
+    classic = bool(style.get("classic"))
+    body_size = 10.5 if classic else 10.0
+    if resume.layout_profile.imported and template_id in {"clear-single", "classic-cn"}:
         imported_font = resume.layout_profile.font_family.strip()
         imported_accent = resume.layout_profile.accent_color.strip()
         if imported_font and len(imported_font) <= 100:
             style["font"] = imported_font
-        if re.fullmatch(r"#[0-9A-Fa-f]{6}", imported_accent):
+        if re.fullmatch(r"#[0-9A-Fa-f]{6}", imported_accent) and not classic:
             style["accent"] = imported_accent[1:].upper()
         if resume.layout_profile.base_font_size is not None:
             body_size = min(max(resume.layout_profile.base_font_size, 8), 12)
-    compact = application_type in {"campus", "internship"}
+    compact = application_type in {"campus", "internship"} or classic
+    resume = tidy_resume_for_layout(resume)
     document = Document()
     section = document.sections[0]
-    margin = Cm(min(style["margin"], 1.25) if compact else style["margin"])
+    if classic:
+        margin = Cm(style["margin"])
+    elif compact:
+        margin = Cm(min(style["margin"], 1.25))
+    else:
+        margin = Cm(style["margin"])
     section.top_margin = section.bottom_margin = margin
     section.left_margin = section.right_margin = margin
 
     normal = document.styles["Normal"]
     normal.font.name = style["font"]
     normal._element.rPr.rFonts.set(qn("w:eastAsia"), style["font"])
-    normal.font.size = Pt(9 if compact else body_size)
+    normal.font.size = Pt(10.5 if classic else (9 if compact else body_size))
     normal.paragraph_format.space_after = Pt(1 if compact else 4)
-    normal.paragraph_format.line_spacing = 1.0 if compact else 1.15
+    normal.paragraph_format.line_spacing = 1.05 if classic else (1.0 if compact else 1.15)
 
-    title = document.add_paragraph()
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    name_run = title.add_run(resume.basics.name or "姓名")
-    _style_run(name_run, style["font"], 20, style["accent"], bold=True)
-    if resume.basics.target_role.value:
-        role = document.add_paragraph()
-        role.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _style_run(role.add_run(resume.basics.target_role.value), style["font"], 10, "687386")
-
-    contact = " · ".join(
-        value for value in [resume.basics.phone, resume.basics.email, resume.basics.location] if value
-    )
-    if contact:
-        paragraph = document.add_paragraph(contact)
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _write_header(document, resume, style, classic=classic)
+    _write_basic_info_block(document, resume, style, compact=compact, classic=classic)
 
     if resume.basics.summary.value:
-        _heading(document, "个人简介", style, compact=compact)
+        _heading(document, "个人简介", style, compact=compact, classic=classic)
         document.add_paragraph(resume.basics.summary.value)
 
     section_order = list(resume.section_order)
@@ -85,37 +82,74 @@ def build_docx(
 
     for section_name in section_order:
         if section_name == "work_experience" and resume.work_experience:
-            _heading(document, "工作经历", style, compact=compact)
+            _heading(
+                document,
+                "职业经历" if classic else "实习工作经历",
+                style,
+                compact=compact,
+                classic=classic,
+            )
             for item in resume.work_experience:
-                _entry_title(document, item.company, item.title, item.start_date, item.end_date, style)
+                _entry_title(
+                    document,
+                    item.company,
+                    item.title,
+                    item.start_date,
+                    item.end_date,
+                    style,
+                    classic=classic,
+                )
                 _bullets(document, [bullet.value for bullet in item.bullets])
         elif section_name == "projects" and resume.projects:
-            _heading(document, "项目经历", style, compact=compact)
+            _heading(document, "项目经历", style, compact=compact, classic=classic)
             for item in resume.projects:
-                _entry_title(document, item.name, item.role, item.start_date, item.end_date, style)
+                _entry_title(
+                    document,
+                    item.name,
+                    item.role,
+                    item.start_date,
+                    item.end_date,
+                    style,
+                    classic=classic,
+                )
                 _bullets(document, [bullet.value for bullet in item.bullets])
         elif section_name == "education" and resume.education:
-            _heading(document, "教育经历", style, compact=compact)
+            _heading(
+                document,
+                "教育背景" if classic else "教育经历",
+                style,
+                compact=compact,
+                classic=classic,
+            )
             for item in resume.education:
-                detail = " · ".join(value for value in [item.degree, item.field] if value)
-                _entry_title(document, item.institution, detail, item.start_date, item.end_date, style)
+                detail = "，".join(value for value in [item.field, item.degree] if value) if classic else " · ".join(
+                    value for value in [item.degree, item.field] if value
+                )
+                _entry_title(
+                    document,
+                    item.institution,
+                    detail,
+                    item.start_date,
+                    item.end_date,
+                    style,
+                    classic=classic,
+                )
                 _bullets(document, [highlight.value for highlight in item.highlights])
         elif section_name == "skills" and resume.skills:
-            _heading(document, "专业技能", style, compact=compact)
-            for group in resume.skills:
-                document.add_paragraph(
-                    f"{group.name}：{'、'.join(item.value for item in group.items)}"
-                )
+            lines = skill_lines_for_export(resume.skills)
+            if lines:
+                _heading(document, "专业技能", style, compact=compact, classic=classic)
+                _bullets(document, lines)
         elif section_name == "custom_sections":
             for custom in resume.custom_sections:
-                _heading(document, custom.title, style, compact=compact)
+                _heading(document, custom.title, style, compact=compact, classic=classic)
                 _bullets(document, [item.value for item in custom.items])
 
     if resume.certificates:
-        _heading(document, "证书", style, compact=compact)
+        _heading(document, "证书", style, compact=compact, classic=classic)
         _bullets(document, [entry.name for entry in resume.certificates])
     if resume.awards:
-        _heading(document, "奖项", style, compact=compact)
+        _heading(document, "奖项", style, compact=compact, classic=classic)
         _bullets(document, [entry.name for entry in resume.awards])
 
     output = BytesIO()
@@ -151,6 +185,9 @@ def build_codex_handoff(
     safe_resume = resume.model_dump(mode="json")
     safe_resume["basics"]["email"] = ""
     safe_resume["basics"]["phone"] = ""
+    safe_resume["basics"]["wechat"] = ""
+    if safe_resume["basics"].get("photo_data_url"):
+        safe_resume["basics"]["photo_data_url"] = "[已上传证件照]"
     confirmed = [fact.model_dump(mode="json") for fact in facts if fact.user_confirmed]
     analysis_payload = analysis.model_dump(mode="json") if analysis else {}
     return "\n\n".join(
@@ -173,17 +210,126 @@ def build_codex_handoff(
     )
 
 
-def _heading(document: Document, text: str, style: dict, *, compact: bool = False) -> None:
+def _write_header(
+    document: Document,
+    resume: ResumeDocument,
+    style: dict,
+    *,
+    classic: bool = False,
+) -> None:
+    photo = _decode_photo(resume.basics.photo_data_url)
+    if photo is None:
+        title = document.add_paragraph()
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title.paragraph_format.space_after = Pt(2 if classic else 4)
+        name_run = title.add_run(resume.basics.name or "姓名")
+        _style_run(name_run, style["font"], 22 if classic else 20, style["accent"], bold=True)
+        if resume.basics.target_role.value and not classic:
+            role = document.add_paragraph()
+            role.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _style_run(role.add_run(resume.basics.target_role.value), style["font"], 10, "687386")
+        return
+
+    table = document.add_table(rows=1, cols=2)
+    table.autofit = True
+    left, right = table.rows[0].cells
+    name = left.paragraphs[0]
+    name.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _style_run(name.add_run(resume.basics.name or "姓名"), style["font"], 20, style["accent"], bold=True)
+    if resume.basics.target_role.value and not classic:
+        role = left.add_paragraph()
+        _style_run(role.add_run(resume.basics.target_role.value), style["font"], 10, "687386")
+    for line in _basic_info_lines(resume.basics, classic=classic):
+        info = left.add_paragraph()
+        run = info.add_run(line)
+        _style_run(run, style["font"], 9, "4B5563")
+    photo_paragraph = right.paragraphs[0]
+    photo_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run = photo_paragraph.add_run()
+    run.add_picture(BytesIO(photo), width=Cm(2.6), height=Cm(3.4))
+
+
+def _write_basic_info_block(
+    document: Document,
+    resume: ResumeDocument,
+    style: dict,
+    *,
+    compact: bool,
+    classic: bool = False,
+) -> None:
+    # When a photo header already embeds basics beside the portrait, skip the duplicate block.
+    if _decode_photo(resume.basics.photo_data_url) is not None:
+        return
+    lines = _basic_info_lines(resume.basics, classic=classic)
+    if not lines:
+        return
+    for line in lines:
+        paragraph = document.add_paragraph(line)
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.paragraph_format.space_after = Pt(1 if compact else 2)
+        for run in paragraph.runs:
+            _style_run(run, style["font"], 9 if compact else 9.5, "333333" if classic else "4B5563")
+
+
+def _basic_info_lines(basics, *, classic: bool = False) -> list[str]:
+    identity = " · ".join(
+        value
+        for value in [
+            f"性别：{basics.gender}" if basics.gender.strip() else "",
+            f"生日：{basics.birthday}" if basics.birthday.strip() else "",
+            f"政治面貌：{basics.political_status}" if basics.political_status.strip() else "",
+            f"现居：{basics.location}" if basics.location.strip() else "",
+        ]
+        if value
+    )
+    contact = " · ".join(
+        value
+        for value in [
+            f"{'手机' if classic else '电话'}：{basics.phone}" if basics.phone.strip() else "",
+            f"邮箱：{basics.email}" if basics.email.strip() else "",
+            f"微信：{basics.wechat}" if basics.wechat.strip() else "",
+        ]
+        if value
+    )
+    if classic:
+        return [line for line in [contact, identity] if line]
+    return [line for line in [identity, contact] if line]
+
+
+def _decode_photo(data_url: str) -> bytes | None:
+    raw = (data_url or "").strip()
+    if not raw.startswith("data:image/") or ";base64," not in raw:
+        return None
+    try:
+        encoded = raw.split(";base64,", 1)[1]
+        payload = b64decode(encoded, validate=False)
+    except Exception:
+        return None
+    if len(payload) < 32 or len(payload) > 900_000:
+        return None
+    return payload
+
+
+def _heading(
+    document: Document,
+    text: str,
+    style: dict,
+    *,
+    compact: bool = False,
+    classic: bool = False,
+) -> None:
     paragraph = document.add_paragraph()
-    paragraph.paragraph_format.space_before = Pt(6 if compact else 10)
-    paragraph.paragraph_format.space_after = Pt(2 if compact else 4)
+    paragraph.paragraph_format.space_before = Pt(8 if classic else (6 if compact else 10))
+    paragraph.paragraph_format.space_after = Pt(3 if classic else (2 if compact else 4))
     _style_run(
         paragraph.add_run(text),
         style["font"],
-        10.5 if compact else 12,
-        style["accent"],
+        12 if classic else (10.5 if compact else 12),
+        "111111" if classic else style["accent"],
         bold=True,
     )
+    if classic:
+        _set_paragraph_bottom_border(paragraph, color="111111")
 
 
 def _entry_title(
@@ -193,14 +339,54 @@ def _entry_title(
     start: str,
     end: str,
     style: dict,
+    *,
+    classic: bool = False,
 ) -> None:
     paragraph = document.add_paragraph()
+    paragraph.paragraph_format.space_before = Pt(2 if classic else 0)
+    paragraph.paragraph_format.space_after = Pt(1 if classic else 0)
+    left = primary.strip()
+    if secondary.strip():
+        left = f"{left}，{secondary.strip()}" if classic else f"{left}  {secondary.strip()}"
+    dates = " - ".join(value for value in [start, end] if value) if classic else " – ".join(
+        value for value in [start, end] if value
+    )
+
+    if classic:
+        from docx.enum.text import WD_TAB_ALIGNMENT, WD_TAB_LEADER
+
+        # Right-align dates on the same line (classic Chinese resume).
+        usable = (
+            document.sections[0].page_width
+            - document.sections[0].left_margin
+            - document.sections[0].right_margin
+        )
+        paragraph.paragraph_format.tab_stops.add_tab_stop(usable, WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.SPACES)
+        _style_run(paragraph.add_run(left or " "), style["font"], 10.5, "111111", bold=True)
+        if dates:
+            paragraph.add_run("\t")
+            _style_run(paragraph.add_run(dates), style["font"], 10.5, "333333", bold=False)
+        return
+
     _style_run(paragraph.add_run(primary), style["font"], 10.5, "172033", bold=True)
     if secondary:
         paragraph.add_run(f"  {secondary}")
-    dates = " – ".join(value for value in [start, end] if value)
     if dates:
         paragraph.add_run(f"    {dates}")
+
+
+def _set_paragraph_bottom_border(paragraph, *, color: str = "111111") -> None:
+    from docx.oxml import OxmlElement
+
+    p_pr = paragraph._p.get_or_add_pPr()
+    p_bdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "12")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), color)
+    p_bdr.append(bottom)
+    p_pr.append(p_bdr)
 
 
 def _bullets(document: Document, values: list[str]) -> None:

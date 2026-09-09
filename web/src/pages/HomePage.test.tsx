@@ -22,6 +22,25 @@ test("展示本地项目及其求职类型", async () => {
       updated_at: "2026-08-23T00:00:00Z",
     },
   ]);
+  vi.spyOn(api, "getProfile").mockResolvedValue({
+    resume: {
+      basics: {
+        name: "张宁", gender: "", birthday: "", email: "", phone: "", location: "",
+        wechat: "", political_status: "", photo_data_url: "",
+        target_role: { value: "", source_fact_ids: [], origin: "manual", confidence: 1 },
+        summary: { value: "", source_fact_ids: [], origin: "manual", confidence: 1 },
+      },
+      education: [], work_experience: [], projects: [], skills: [],
+      certificates: [], awards: [], custom_sections: [],
+      section_order: [],
+      layout_profile: {
+        source_kind: "builtin", font_family: "", heading_font_family: "", accent_color: "",
+        base_font_size: null, line_height: null, columns: 1, imported: false,
+      },
+    },
+    facts: [{ id: "f1", category: "基本信息", statement: "姓名：张宁", source_type: "manual", source_location: "", user_confirmed: true }],
+    ready: true,
+  });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(

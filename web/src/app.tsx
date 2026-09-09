@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { ProviderStatus } from "./components/ProviderStatus";
 import { HomePage } from "./pages/HomePage";
 import { PracticePage } from "./pages/PracticePage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 
@@ -18,10 +19,14 @@ function AppFrame() {
           <span className="brand-mark" aria-hidden="true">证</span>
           <span>简历证据工作台</span>
         </Link>
-        <ProviderStatus />
+        <nav className="topbar-nav" aria-label="主导航">
+          <Link to="/profile">经历库</Link>
+          <ProviderStatus />
+        </nav>
       </header>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/projects/:id" element={<WorkspacePage />} />
         <Route path="/projects/:id/practice" element={<PracticePage />} />
         <Route path="/settings" element={<SettingsPage />} />

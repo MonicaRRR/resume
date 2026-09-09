@@ -10,9 +10,14 @@ export function blankResume(): ResumeDocument {
   return {
     basics: {
       name: "",
+      gender: "",
+      birthday: "",
       email: "",
       phone: "",
       location: "",
+      wechat: "",
+      political_status: "",
+      photo_data_url: "",
       target_role: sourcedText(),
       summary: sourcedText(),
     },
@@ -26,9 +31,9 @@ export function blankResume(): ResumeDocument {
     section_order: [
       "basics",
       "education",
+      "skills",
       "work_experience",
       "projects",
-      "skills",
       "certificates",
       "awards",
       "custom_sections",
@@ -50,9 +55,14 @@ export function blankResume(): ResumeDocument {
 export function estimateResumeUnits(resume: ResumeDocument): number {
   const basics = 90 + [
     resume.basics.name,
+    resume.basics.gender,
+    resume.basics.birthday,
     resume.basics.email,
     resume.basics.phone,
     resume.basics.location,
+    resume.basics.wechat,
+    resume.basics.political_status,
+    resume.basics.photo_data_url ? "photo" : "",
     resume.basics.target_role.value,
     resume.basics.summary.value,
   ].reduce((total, value) => total + value.length, 0);

@@ -1,7 +1,14 @@
 import pytest
 
 from resume_mvp.domain import Fact, ResumeDocument, ResumePatch, ResumePatchOperation
-from resume_mvp.patches import PatchConflictError, apply_resume_patch
+from resume_mvp.patches import PatchConflictError, apply_resume_patch, normalize_patch_path
+
+
+def test_normalize_common_ai_path_aliases() -> None:
+    assert normalize_patch_path("summary") == "/basics/summary"
+    assert normalize_patch_path("/project/0/bullets") == "/projects/0/bullets"
+    assert normalize_patch_path("/work/1") == "/work_experience/1"
+    assert normalize_patch_path("/resume/projects") == "/projects"
 
 
 def sample_resume_and_patch() -> tuple[ResumeDocument, ResumePatch, Fact]:
@@ -67,9 +74,74 @@ def test_rejects_stale_before_value() -> None:
         apply_resume_patch(resume, patch, {"op-summary"}, facts=[fact])
 
 
+def test_applies_when_before_snapshot_is_incomplete_but_same_text() -> None:
+    resume, patch, fact = sample_resume_and_patch()
+    patch.operations[0].before = {"value": "产品经理"}
+
+    updated = apply_resume_patch(resume, patch, {"op-summary"}, facts=[fact])
+    assert updated.basics.summary.value == "面向企业服务的产品经理"
+
+
 def test_rejects_unknown_fact_reference() -> None:
     """Catches a plausible-sounding rewrite with no user evidence."""
     resume, patch, _ = sample_resume_and_patch()
 
     with pytest.raises(ValueError, match="缺少事实依据"):
         apply_resume_patch(resume, patch, {"op-summary"}, facts=[])
+
+
+def test_applies_multiple_accepted_ops_against_original_baseline() -> None:
+    resume, patch, fact = sample_resume_and_patch()
+
+    updated = apply_resume_patch(resume, patch, {"op-summary", "op-role"}, facts=[fact])
+
+    assert updated.basics.summary.value == "面向企业服务的产品经理"
+    assert updated.basics.target_role.value == "高级产品经理"
+
+
+def test_applies_normalized_alias_paths() -> None:
+    resume, patch, fact = sample_resume_and_patch()
+    patch.operations[0].path = "/summary"
+
+    updated = apply_resume_patch(resume, patch, {"op-summary"}, facts=[fact])
+    assert updated.basics.summary.value == "面向企业服务的产品经理"
+
+
+def test_rejects_unknown_root_with_path_in_message() -> None:
+    resume, patch, fact = sample_resume_and_patch()
+    patch.operations[0].path = "/layout_profile/font_family"
+
+    with pytest.raises(ValueError, match="补丁路径不允许修改该字段：/layout_profile/font_family"):
+        apply_resume_patch(resume, patch, {"op-summary"}, facts=[fact])
+
+
+def test_applies_ai_rewrite_even_if_nested_sources_missing() -> None:
+    fact = Fact(
+        category="工作经历",
+        statement="负责企业服务产品规划",
+        source_type="manual",
+        user_confirmed=True,
+    )
+    resume = ResumeDocument.blank()
+    resume.basics.summary.value = "产品经理"
+    patch = ResumePatch(
+        operations=[
+            ResumePatchOperation(
+                id="op-summary",
+                path="/basics/summary",
+                before=resume.basics.summary.model_dump(mode="json"),
+                after={
+                    "value": "面向企业服务的产品经理",
+                    "source_fact_ids": [],
+                    "origin": "ai_rewrite",
+                    "confidence": 1,
+                },
+                reason="突出业务领域",
+                source_fact_ids=[fact.id],
+            )
+        ]
+    )
+
+    updated = apply_resume_patch(resume, patch, {"op-summary"}, facts=[fact])
+    assert updated.basics.summary.value == "面向企业服务的产品经理"
+    assert updated.basics.summary.source_fact_ids == [fact.id]

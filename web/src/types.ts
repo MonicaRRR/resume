@@ -29,8 +29,17 @@ const CustomSectionSchema = z.object({ id: z.string(), title: z.string(), items:
 
 export const ResumeSchema = z.object({
   basics: z.object({
-    name: z.string(), email: z.string(), phone: z.string(), location: z.string(),
-    target_role: SourcedTextSchema, summary: SourcedTextSchema,
+    name: z.string(),
+    gender: z.string().default(""),
+    birthday: z.string().default(""),
+    email: z.string(),
+    phone: z.string(),
+    location: z.string(),
+    wechat: z.string().default(""),
+    political_status: z.string().default(""),
+    photo_data_url: z.string().default(""),
+    target_role: SourcedTextSchema,
+    summary: SourcedTextSchema,
   }),
   education: z.array(EducationSchema),
   work_experience: z.array(WorkSchema),
@@ -66,9 +75,19 @@ export const JobAnalysisSchema = z.object({
 });
 export type JobAnalysis = z.infer<typeof JobAnalysisSchema>;
 
+export const MatchReportSchema = z.object({
+  coverage: z.number(),
+  items: z.array(z.object({
+    requirement_id: z.string(), requirement: z.string(), status: z.enum(["已有证据", "证据较弱", "没有证据", "软性要求"]),
+    fact_ids: z.array(z.string()), excerpts: z.array(z.string()), reason: z.string().default(""), weight: z.number(),
+  })),
+});
+export type MatchReport = z.infer<typeof MatchReportSchema>;
+
 export const ProjectSchema = z.object({
   id: z.string(), title: z.string(), company_name: z.string(), application_type: ApplicationTypeSchema,
   job_description: z.string(), job_analysis: JobAnalysisSchema.nullable(),
+  match_report: MatchReportSchema.nullable().optional().default(null),
   active_resume_version_id: z.string().nullable(), selected_template_id: z.string(),
   created_at: z.string(), updated_at: z.string(),
 });
@@ -91,21 +110,33 @@ export const PatchOperationSchema = z.object({
   reason: z.string(), jd_requirement_ids: z.array(z.string()), source_fact_ids: z.array(z.string()),
   risk: z.enum(["low", "medium", "high"]),
 });
-export const ResumePatchSchema = z.object({ operations: z.array(PatchOperationSchema) });
+export type ResumePatchOperation = z.infer<typeof PatchOperationSchema>;
+
+export const ExperienceAskSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  guidance: z.string().default(""),
+  topic: z.string().default("相关项目补充"),
+  jd_keywords: z.array(z.string()).default([]),
+});
+export type ExperienceAsk = z.infer<typeof ExperienceAskSchema>;
+
+export const ResumePatchSchema = z.object({
+  operations: z.array(PatchOperationSchema),
+  experience_asks: z.array(ExperienceAskSchema).default([]),
+});
 export type ResumePatch = z.infer<typeof ResumePatchSchema>;
 
-export const MatchReportSchema = z.object({
-  coverage: z.number(),
-  items: z.array(z.object({
-    requirement_id: z.string(), requirement: z.string(), status: z.enum(["已有证据", "证据较弱", "没有证据"]),
-    fact_ids: z.array(z.string()), excerpts: z.array(z.string()), weight: z.number(),
-  })),
+export const PatchDiscussionResultSchema = z.object({
+  reply: z.string(),
+  proposes_change: z.boolean(),
+  draft_operation: PatchOperationSchema.nullable(),
 });
-export type MatchReport = z.infer<typeof MatchReportSchema>;
+export type PatchDiscussionResult = z.infer<typeof PatchDiscussionResultSchema>;
 
 export const FollowupQuestionSchema = z.object({
   id: z.string(), question: z.string(), topic: z.string(), requirement_id: z.string(),
-  rationale: z.string(), skippable: z.boolean(),
+  rationale: z.string(), guidance: z.string().default(""), skippable: z.boolean(),
 });
 
 export const ProviderSettingsSchema = z.object({
@@ -113,6 +144,25 @@ export const ProviderSettingsSchema = z.object({
   configured: z.boolean(), codex_confirmed: z.boolean(),
 });
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
+
+export const CodexModelOptionSchema = z.object({
+  slug: z.string(),
+  display_name: z.string(),
+  description: z.string().default(""),
+});
+export type CodexModelOption = z.infer<typeof CodexModelOptionSchema>;
+
+export const CodexDetectSchema = z.object({
+  installed: z.boolean(),
+  authenticated: z.boolean(),
+  available: z.boolean(),
+  version: z.string().default(""),
+  default_model: z.string().default(""),
+  binary_path: z.string().default(""),
+  models: z.array(CodexModelOptionSchema).default([]),
+  message: z.string().default(""),
+});
+export type CodexDetectResult = z.infer<typeof CodexDetectSchema>;
 
 const PracticeQuestionSchema = z.object({
   id: z.string(), category: z.string(), prompt: z.string(), hint: z.string(), explanation: z.string().nullable(),

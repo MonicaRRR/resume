@@ -28,6 +28,27 @@ test("模板推荐根据简历证据密度选择且不改写内容", () => {
 
   const recommendation = recommendTemplate(resume, null);
 
-  expect(recommendation.id).toBe("project-focus");
+  expect(recommendation.id).toBe("classic-cn");
   expect(resume.basics.name).toBe("张宁");
+});
+
+
+test("项目明显更多时仍推荐项目聚焦模板", () => {
+  const resume = blankResume();
+  resume.projects.push(
+    {
+      id: "project-1", name: "订单平台", role: "负责人", start_date: "", end_date: "",
+      bullets: [{ value: "完成接口重构", source_fact_ids: ["fact-1"], origin: "manual", confidence: 1 }],
+    },
+    {
+      id: "project-2", name: "数据看板", role: "开发", start_date: "", end_date: "",
+      bullets: [{ value: "完成图表", source_fact_ids: ["fact-2"], origin: "manual", confidence: 1 }],
+    },
+    {
+      id: "project-3", name: "爬虫", role: "开发", start_date: "", end_date: "",
+      bullets: [{ value: "抓取公开数据", source_fact_ids: ["fact-3"], origin: "manual", confidence: 1 }],
+    },
+  );
+
+  expect(recommendTemplate(resume, null).id).toBe("project-focus");
 });

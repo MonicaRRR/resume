@@ -26,7 +26,7 @@ function cloneResume(resume: ResumeDocument): ResumeDocument {
 export const useEditorStore = create<EditorState>((set) => ({
   original: null,
   draft: null,
-  templateId: "clear-single",
+  templateId: "classic-cn",
   patch: null,
   selectedPatchIds: new Set(),
   loadResume: (resume) => set({ original: cloneResume(resume), draft: cloneResume(resume), selectedPatchIds: new Set() }),

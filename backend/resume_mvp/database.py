@@ -29,4 +29,6 @@ def create_database(path: Path) -> sessionmaker[Session]:
                     "VARCHAR(20) NOT NULL DEFAULT 'experienced'"
                 )
             )
+        if "match_report" not in project_columns:
+            connection.execute(text("ALTER TABLE projects ADD COLUMN match_report JSON"))
     return sessionmaker(bind=engine, expire_on_commit=False)

@@ -16,8 +16,9 @@ class ProjectRecord(Base):
     application_type: Mapped[str] = mapped_column(String(20), default="experienced")
     job_description: Mapped[str] = mapped_column(Text)
     job_analysis: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    match_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     active_resume_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    selected_template_id: Mapped[str] = mapped_column(String(50), default="clear-single")
+    selected_template_id: Mapped[str] = mapped_column(String(50), default="classic-cn")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
@@ -40,3 +41,12 @@ class PracticeSessionRecord(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
     payload: Mapped[dict] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class UserProfileRecord(Base):
+    __tablename__ = "user_profile"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="default")
+    resume: Mapped[dict] = mapped_column(JSON, default=dict)
+    facts: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

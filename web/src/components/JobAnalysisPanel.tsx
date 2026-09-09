@@ -14,10 +14,22 @@ export function JobAnalysisPanel({ analysis, match }: { analysis: JobAnalysis; m
       <div className="requirement-list">
         {analysis.requirements.map((requirement) => {
           const item = matchById.get(requirement.id);
-          return <article key={requirement.id}>
-            <div><strong>{requirement.text}</strong>{item && <span className={`match-${item.status}`}>{item.status}</span>}</div>
+          return <article key={requirement.id} className={requirement.inferred ? "requirement-inferred" : undefined}>
+            <div>
+              <strong>{requirement.text}</strong>
+              {requirement.inferred && <span className="inferred-tag">推断 · 原文未精确定位</span>}
+              {item && <span className={`match-${item.status}`}>{item.status}</span>}
+            </div>
             <blockquote>“{requirement.evidence_quote}”</blockquote>
-            {item?.excerpts.map((excerpt, index) => <p key={index}>证据：{excerpt}</p>)}
+            {item?.reason && (
+              <p className={`match-reason match-reason-${item.status}`}>
+                {item.status === "证据较弱" ? "为何较弱：" : item.status === "没有证据" ? "缺口说明：" : item.status === "软性要求" ? "说明：" : "匹配说明："}
+                {item.reason}
+              </p>
+            )}
+            {item?.excerpts.map((excerpt, index) => (
+              <p key={index}>{excerpt.startsWith("软性要求") ? excerpt : `证据：${excerpt}`}</p>
+            ))}
           </article>;
         })}
       </div>

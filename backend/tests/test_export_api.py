@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import BytesIO
 
 from docx import Document
 from fastapi.testclient import TestClient
@@ -6,7 +7,45 @@ from fastapi.testclient import TestClient
 from resume_mvp.main import create_app
 
 
+def _seed_profile(client: TestClient) -> None:
+    client.put(
+        "/api/profile",
+        json={
+            "resume": {
+                "basics": {
+                    "name": "张宁",
+                    "email": "",
+                    "phone": "",
+                    "location": "",
+                    "target_role": {"value": "后端工程师", "source_fact_ids": [], "origin": "manual", "confidence": 1},
+                    "summary": {"value": "", "source_fact_ids": [], "origin": "manual", "confidence": 1},
+                },
+                "education": [],
+                "work_experience": [{
+                    "id": "w1",
+                    "company": "示例科技",
+                    "title": "实习生",
+                    "start_date": "",
+                    "end_date": "",
+                    "bullets": [{"value": "使用 Python 开发 API", "source_fact_ids": [], "origin": "manual", "confidence": 1}],
+                }],
+                "projects": [],
+                "skills": [{"id": "s1", "name": "技能", "items": [{"value": "Python", "source_fact_ids": [], "origin": "manual", "confidence": 1}]}],
+                "certificates": [],
+                "awards": [],
+                "custom_sections": [],
+                "section_order": ["basics", "work_experience", "projects", "education", "skills"],
+                "layout_profile": {
+                    "source_kind": "builtin", "font_family": "", "heading_font_family": "",
+                    "accent_color": "", "base_font_size": None, "line_height": None, "columns": 1, "imported": False,
+                },
+            }
+        },
+    )
+
+
 def create_project_with_resume(client: TestClient) -> str:
+    _seed_profile(client)
     project = client.post(
         "/api/projects",
         json={
@@ -46,9 +85,10 @@ def test_export_routes_return_reopenable_files_and_handoff(tmp_path: Path) -> No
     assert "不得虚构事实" in handoff.json()["markdown"]
 
 
-def test_campus_docx_export_is_blocked_when_content_estimate_overflows(tmp_path: Path) -> None:
-    """Catches export of a campus resume known to exceed the one-page capacity."""
+def test_campus_docx_export_allowed_when_content_exceeds_one_page(tmp_path: Path) -> None:
+    """Campus overflow is a soft warning; export must still succeed."""
     client = TestClient(create_app(data_dir=tmp_path))
+    _seed_profile(client)
     project = client.post(
         "/api/projects",
         json={
@@ -66,5 +106,36 @@ def test_campus_docx_export_is_blocked_when_content_estimate_overflows(tmp_path:
 
     response = client.post(f"/api/projects/{project['id']}/export/docx")
 
-    assert response.status_code == 422
-    assert response.json()["detail"]["code"] == "RESUME_OVERFLOW"
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+
+def test_docx_export_uses_live_draft_basics(tmp_path: Path) -> None:
+    """Catches Word export ignoring birthday/gender from the current editor draft."""
+    client = TestClient(create_app(data_dir=tmp_path))
+    project_id = create_project_with_resume(client)
+    version = client.get(f"/api/projects/{project_id}/versions").json()[0]
+    resume = version["resume"]
+    resume["basics"]["gender"] = "女"
+    resume["basics"]["birthday"] = "2001-08-08"
+    resume["basics"]["wechat"] = "draft-wechat"
+    resume["basics"]["location"] = "杭州"
+
+    response = client.post(
+        f"/api/projects/{project_id}/export/docx",
+        json={"resume": resume, "template_id": "clear-single"},
+    )
+
+    assert response.status_code == 200
+    document = Document(BytesIO(response.content))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text += "\n" + "\n".join(paragraph.text for paragraph in cell.paragraphs)
+    assert "生日：2001-08-08" in text
+    assert "性别：女" in text
+    assert "微信：draft-wechat" in text
+    assert "现居：杭州" in text

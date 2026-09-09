@@ -34,9 +34,14 @@ class SourcedText(BaseModel):
 
 class Basics(BaseModel):
     name: str = ""
+    gender: str = ""
+    birthday: str = ""
     email: str = ""
     phone: str = ""
     location: str = ""
+    wechat: str = ""
+    political_status: str = ""
+    photo_data_url: str = ""
     target_role: SourcedText = Field(default_factory=SourcedText)
     summary: SourcedText = Field(default_factory=SourcedText)
 
@@ -111,13 +116,54 @@ class ResumeDocument(BaseModel):
     section_order: list[str] = Field(
         default_factory=lambda: [
             "basics",
-            "work_experience",
-            "projects",
             "education",
             "skills",
+            "work_experience",
+            "projects",
         ]
     )
     layout_profile: LayoutProfile = Field(default_factory=LayoutProfile)
+
+    @model_validator(mode="after")
+    def migrate_legacy_default_section_order(self) -> ResumeDocument:
+        """Upgrade known legacy defaults so existing libraries pick up the new layout."""
+        legacy_orders = {
+            ("basics", "work_experience", "projects", "education", "skills"),
+            ("basics", "education", "work_experience", "projects", "skills"),
+            (
+                "basics",
+                "education",
+                "work_experience",
+                "projects",
+                "skills",
+                "certificates",
+                "awards",
+                "custom_sections",
+            ),
+            (
+                "basics",
+                "work_experience",
+                "projects",
+                "education",
+                "skills",
+                "certificates",
+                "awards",
+                "custom_sections",
+            ),
+        }
+        if tuple(self.section_order) in legacy_orders:
+            extras = [name for name in self.section_order if name not in {
+                "basics", "education", "skills", "work_experience", "projects",
+            }]
+            self.section_order = [
+                "basics",
+                "education",
+                "skills",
+                "work_experience",
+                "projects",
+                *extras,
+            ]
+        return self
 
     @classmethod
     def blank(cls) -> ResumeDocument:
@@ -155,9 +201,10 @@ class JobAnalysis(BaseModel):
 class MatchItem(BaseModel):
     requirement_id: str
     requirement: str
-    status: Literal["已有证据", "证据较弱", "没有证据"]
+    status: Literal["已有证据", "证据较弱", "没有证据", "软性要求"]
     fact_ids: list[str] = Field(default_factory=list)
     excerpts: list[str] = Field(default_factory=list)
+    reason: str = ""
     weight: float = 1.0
 
 
@@ -178,8 +225,27 @@ class ResumePatchOperation(BaseModel):
     risk: Literal["low", "medium", "high"] = "low"
 
 
+class ExperienceAsk(BaseModel):
+    """Soft prompt when inventory looks thin for the JD—helps user recall more projects."""
+
+    id: str = Field(default_factory=new_id)
+    question: str
+    guidance: str = ""
+    topic: str = "相关项目补充"
+    jd_keywords: list[str] = Field(default_factory=list)
+
+
 class ResumePatch(BaseModel):
     operations: list[ResumePatchOperation] = Field(default_factory=list)
+    experience_asks: list[ExperienceAsk] = Field(default_factory=list)
+
+
+class PatchDiscussionResult(BaseModel):
+    """AI discussion about one patch item; draft applies only after user confirms."""
+
+    reply: str
+    proposes_change: bool = False
+    draft_operation: ResumePatchOperation | None = None
 
 
 class FollowupQuestion(BaseModel):
@@ -188,6 +254,7 @@ class FollowupQuestion(BaseModel):
     topic: str
     requirement_id: str = ""
     rationale: str = ""
+    guidance: str = ""
     skippable: bool = True
 
 
@@ -258,7 +325,8 @@ class JobProject(BaseModel):
     application_type: ApplicationType = "experienced"
     job_description: str
     job_analysis: JobAnalysis | None = None
+    match_report: MatchReport | None = None
     active_resume_version_id: str | None = None
-    selected_template_id: str = "clear-single"
+    selected_template_id: str = "classic-cn"
     created_at: datetime
     updated_at: datetime

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from resume_mvp.domain import (
@@ -10,12 +10,14 @@ from resume_mvp.domain import (
     Fact,
     JobAnalysis,
     JobProject,
+    MatchReport,
     PracticeSession,
     ResumeDocument,
     ResumeVersion,
     utc_now,
 )
-from resume_mvp.tables import PracticeSessionRecord, ProjectRecord, ResumeVersionRecord
+from resume_mvp.tables import PracticeSessionRecord, ProjectRecord, ResumeVersionRecord, UserProfileRecord
+from resume_mvp.profile import facts_from_resume, profile_is_ready
 
 
 class ProjectNotFoundError(LookupError):
@@ -30,9 +32,38 @@ class PracticeSessionNotFoundError(LookupError):
     pass
 
 
+class ProfileRequiredError(ValueError):
+    pass
+
+
 class ProjectRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._sessions = session_factory
+
+    def get_profile(self) -> tuple[ResumeDocument, list[Fact]]:
+        with self._sessions() as session:
+            record = session.get(UserProfileRecord, "default")
+            if record is None or not record.resume:
+                return ResumeDocument.blank(), []
+            resume = ResumeDocument.model_validate(record.resume)
+            facts = [Fact.model_validate(fact) for fact in (record.facts or [])]
+            return resume, facts
+
+    def save_profile(self, resume: ResumeDocument) -> tuple[ResumeDocument, list[Fact]]:
+        facts = facts_from_resume(resume)
+        with self._sessions() as session:
+            record = session.get(UserProfileRecord, "default")
+            payload = resume.model_dump(mode="json")
+            fact_payload = [fact.model_dump(mode="json") for fact in facts]
+            if record is None:
+                record = UserProfileRecord(id="default", resume=payload, facts=fact_payload)
+                session.add(record)
+            else:
+                record.resume = payload
+                record.facts = fact_payload
+                record.updated_at = utc_now()
+            session.commit()
+            return resume, facts
 
     def create(
         self,
@@ -42,6 +73,10 @@ class ProjectRepository:
         application_type: ApplicationType,
         job_description: str,
     ) -> JobProject:
+        profile_resume, profile_facts = self.get_profile()
+        if not profile_is_ready(profile_resume):
+            raise ProfileRequiredError("请先完善个人经历库（至少填写姓名，以及教育/工作/项目/技能之一）")
+
         with self._sessions() as session:
             record = ProjectRecord(
                 title=title.strip(),
@@ -50,6 +85,16 @@ class ProjectRepository:
                 job_description=job_description.strip(),
             )
             session.add(record)
+            session.flush()
+            version = ResumeVersionRecord(
+                project_id=record.id,
+                resume=profile_resume.model_dump(mode="json"),
+                facts=[fact.model_dump(mode="json") for fact in profile_facts],
+                reason="从个人经历库创建投递底稿",
+            )
+            session.add(version)
+            session.flush()
+            record.active_resume_version_id = version.id
             session.commit()
             return self._project(record)
 
@@ -67,6 +112,20 @@ class ProjectRepository:
                 raise ProjectNotFoundError(project_id)
             return self._project(record)
 
+    def delete(self, project_id: str) -> None:
+        with self._sessions() as session:
+            record = session.get(ProjectRecord, project_id)
+            if record is None:
+                raise ProjectNotFoundError(project_id)
+            session.execute(
+                delete(PracticeSessionRecord).where(PracticeSessionRecord.project_id == project_id)
+            )
+            session.execute(
+                delete(ResumeVersionRecord).where(ResumeVersionRecord.project_id == project_id)
+            )
+            session.delete(record)
+            session.commit()
+
     def update(
         self,
         project_id: str,
@@ -76,7 +135,9 @@ class ProjectRepository:
         application_type: ApplicationType | None = None,
         job_description: str | None = None,
         job_analysis: JobAnalysis | None = None,
+        match_report: MatchReport | None = None,
         selected_template_id: str | None = None,
+        clear_match_report: bool = False,
     ) -> JobProject:
         with self._sessions() as session:
             record = session.get(ProjectRecord, project_id)
@@ -92,6 +153,10 @@ class ProjectRepository:
                 record.job_description = job_description.strip()
             if job_analysis is not None:
                 record.job_analysis = job_analysis.model_dump(mode="json")
+            if match_report is not None:
+                record.match_report = match_report.model_dump(mode="json")
+            if clear_match_report:
+                record.match_report = None
             if selected_template_id is not None:
                 record.selected_template_id = selected_template_id
             record.updated_at = utc_now()
@@ -122,6 +187,22 @@ class ProjectRepository:
             project.updated_at = utc_now()
             session.commit()
             return self._version(version)
+
+    def restore_from_profile(self, project_id: str) -> ResumeVersion:
+        """Replace the active project draft with a fresh copy of the experience library."""
+        self.get(project_id)
+        profile_resume, profile_facts = self.get_profile()
+        if not profile_is_ready(profile_resume):
+            raise ProfileRequiredError("经历库不完整，请先完善后再复原")
+        # Deep-copy via dump/validate so later project edits never mutate the library.
+        resume = ResumeDocument.model_validate(profile_resume.model_dump(mode="json"))
+        facts = [Fact.model_validate(fact.model_dump(mode="json")) for fact in profile_facts]
+        return self.save_version(
+            project_id,
+            resume,
+            reason="从经历库一键复原",
+            facts=facts,
+        )
 
     def list_versions(self, project_id: str) -> list[ResumeVersion]:
         self.get(project_id)
@@ -195,6 +276,7 @@ class ProjectRepository:
             application_type=record.application_type,
             job_description=record.job_description,
             job_analysis=JobAnalysis.model_validate(record.job_analysis) if record.job_analysis else None,
+            match_report=MatchReport.model_validate(record.match_report) if getattr(record, "match_report", None) else None,
             active_resume_version_id=record.active_resume_version_id,
             selected_template_id=record.selected_template_id,
             created_at=record.created_at,

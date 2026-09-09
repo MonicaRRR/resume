@@ -20,8 +20,13 @@ from resume_mvp.exports import build_codex_handoff, build_docx, build_resume_jso
 def sample_resume() -> ResumeDocument:
     resume = ResumeDocument.blank()
     resume.basics.name = "张宁"
+    resume.basics.gender = "女"
+    resume.basics.birthday = "2002-05-18"
     resume.basics.email = "private@example.com"
     resume.basics.phone = "13800000000"
+    resume.basics.location = "上海"
+    resume.basics.wechat = "zhangning"
+    resume.basics.political_status = "共青团员"
     resume.basics.target_role = SourcedText(value="后端工程师")
     resume.basics.summary = SourcedText(value="专注可靠 API")
     return resume
@@ -47,11 +52,24 @@ def test_docx_export_can_be_reopened_and_contains_current_resume() -> None:
     data = build_docx(sample_resume(), "clear-single")
 
     document = Document(BytesIO(data))
-    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    text = _document_text(document)
 
     assert "张宁" in text
     assert "后端工程师" in text
+    assert "生日：2002-05-18" in text
+    assert "性别：女" in text
     assert len(data) > 1_000
+
+
+def test_docx_export_embeds_resume_photo_in_header() -> None:
+    resume = sample_resume()
+    resume.basics.photo_data_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    document = Document(BytesIO(build_docx(resume, "clear-single")))
+    assert len(document.inline_shapes) >= 1
+    assert "张宁" in _document_text(document)
 
 
 def test_json_export_excludes_secrets_and_contains_active_resume() -> None:
@@ -92,7 +110,61 @@ def test_codex_handoff_omits_contact_details_but_keeps_confirmed_facts() -> None
     assert "使用 Python 开发订单 API" in markdown
     assert "private@example.com" not in markdown
     assert "13800000000" not in markdown
+    assert "zhangning" not in markdown
     assert "不得虚构事实" in markdown
+
+
+def test_codex_handoff_redacts_uploaded_photo_payload() -> None:
+    resume = sample_resume()
+    resume.basics.photo_data_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    markdown = build_codex_handoff(sample_project(), None, resume, [])
+    assert "iVBORw0KGgo" not in markdown
+    assert "[已上传证件照]" in markdown
+
+
+def test_classic_cn_docx_matches_reference_layout_tokens() -> None:
+    """Catches the fang-hongjian PDF layout not being applied to Word export."""
+    from resume_mvp.domain import EducationEntry, SkillGroup, SourcedText, WorkExperienceEntry
+
+    resume = sample_resume()
+    resume.education = [
+        EducationEntry(
+            institution="示例大学",
+            field="计算机",
+            degree="本科",
+            start_date="2020.09",
+            end_date="2024.06",
+        )
+    ]
+    resume.work_experience = [
+        WorkExperienceEntry(
+            company="示例公司",
+            title="实习生",
+            start_date="2023.06",
+            end_date="2023.09",
+            bullets=[SourcedText(value="完成接口开发与联调")],
+        )
+    ]
+    resume.skills = [SkillGroup(name="专业技能", items=[SourcedText(value="Python、SQL")])]
+
+    document = Document(BytesIO(build_docx(resume, "classic-cn", "campus")))
+    text = _document_text(document)
+
+    assert "教育背景" in text
+    assert "职业经历" in text
+    assert "专业技能" in text
+    assert "手机：13800000000" in text
+    assert "示例大学，计算机，本科" in text
+    assert "2020.09 - 2024.06" in text
+    assert document.styles["Normal"].font.name == "SimSun"
+    # Section headings should carry a bottom border like the reference PDF.
+    heading = next(paragraph for paragraph in document.paragraphs if paragraph.text == "教育背景")
+    assert heading._p.pPr is not None
+    borders = heading._p.pPr.xpath("./w:pBdr/w:bottom")
+    assert borders, "classic-cn section headings need a bottom border"
 
 
 def test_campus_docx_uses_compact_layout_tokens() -> None:
@@ -122,3 +194,12 @@ def test_docx_export_prefers_valid_imported_template_tokens() -> None:
     assert document.styles["Normal"].font.name == "FangSong"
     assert document.styles["Normal"].font.size == Pt(11)
     assert str(document.paragraphs[0].runs[0].font.color.rgb) == "7A3E8E"
+
+
+def _document_text(document: Document) -> str:
+    parts = [paragraph.text for paragraph in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                parts.extend(paragraph.text for paragraph in cell.paragraphs)
+    return "\n".join(parts)

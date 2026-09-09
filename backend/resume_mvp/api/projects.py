@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
 
 from resume_mvp.ai_workflows import (
-    JobEvidenceError,
     UnsupportedFactError,
     analyze_job,
     generate_followup_questions,
+    refine_patch_operation,
     suggest_resume_patch,
 )
 from resume_mvp.api.dependencies import (
@@ -24,13 +24,17 @@ from resume_mvp.domain import (
     MatchReport,
     ResumeDocument,
     ResumePatch,
+    PatchDiscussionResult,
     ResumeVersion,
 )
+from resume_mvp.evidence_match import analyze_evidence_match
 from resume_mvp.ingestion import ImportResult, ResumeImportError, import_resume
 from resume_mvp.matching import calculate_match
+from resume_mvp.layout_tidy import tidy_resume_for_layout
 from resume_mvp.patches import PatchConflictError, apply_resume_patch
+from resume_mvp.profile import profile_is_ready
 from resume_mvp.providers.base import ProviderError
-from resume_mvp.repositories import ProjectNotFoundError, VersionNotFoundError
+from resume_mvp.repositories import ProjectNotFoundError, ProfileRequiredError, VersionNotFoundError
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -85,19 +89,54 @@ class PatchApplyInput(BaseModel):
     accepted_operation_ids: list[str]
 
 
+class PatchRefineInput(BaseModel):
+    provider: str
+    patch: ResumePatch
+    operation_id: str
+    message: str = Field(min_length=1)
+    history: list[dict[str, str]] = Field(default_factory=list)
+
+
 @router.get("", response_model=list[JobProject])
 def list_projects(services: AppServices = Depends(get_services)) -> list[JobProject]:
     return services.repository.list()
 
 
 @router.post("", response_model=JobProject, status_code=201)
-def create_project(body: ProjectCreate, services: AppServices = Depends(get_services)) -> JobProject:
-    return services.repository.create(
-        title=body.title,
-        company_name=body.company_name,
-        application_type=body.application_type,
-        job_description=body.job_description,
-    )
+async def create_project(body: ProjectCreate, services: AppServices = Depends(get_services)) -> JobProject:
+    profile_resume, _ = services.repository.get_profile()
+    if not profile_is_ready(profile_resume):
+        raise HTTPException(
+            422,
+            detail={"code": "PROFILE_REQUIRED", "message": "请先完善个人经历库（至少填写姓名，以及教育/工作/项目/技能之一）"},
+        )
+    provider = _configured_provider_or_422(services)
+    try:
+        project = services.repository.create(
+            title=body.title,
+            company_name=body.company_name,
+            application_type=body.application_type,
+            job_description=body.job_description,
+        )
+    except ProfileRequiredError as error:
+        raise HTTPException(422, detail={"code": "PROFILE_REQUIRED", "message": str(error)}) from error
+
+    try:
+        analysis = await analyze_job(provider, project.company_name, project.job_description)
+        project = services.repository.update(project.id, job_analysis=analysis, clear_match_report=True)
+        version = services.repository.get_active_version(project.id)
+        if version is not None:
+            report = await analyze_evidence_match(provider, analysis, version.resume, version.facts)
+            project = services.repository.update(project.id, match_report=report)
+    except ProviderError as error:
+        raise HTTPException(
+            502,
+            detail={
+                "code": "PROVIDER_FAILED",
+                "message": f"项目已创建，但岗位分析失败：{error}。请检查模型设置后重新分析。",
+            },
+        ) from error
+    return project
 
 
 @router.get("/{project_id}", response_model=JobProject)
@@ -112,7 +151,17 @@ def update_project(
     services: AppServices = Depends(get_services),
 ) -> JobProject:
     _project_or_404(services, project_id)
-    return services.repository.update(project_id, **body.model_dump(exclude_unset=True))
+    payload = body.model_dump(exclude_unset=True)
+    # Changing JD invalidates cached match until re-analysis.
+    if "job_description" in payload:
+        return services.repository.update(project_id, clear_match_report=True, **payload)
+    return services.repository.update(project_id, **payload)
+
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project(project_id: str, services: AppServices = Depends(get_services)) -> None:
+    _project_or_404(services, project_id)
+    services.repository.delete(project_id)
 
 
 @router.post("/{project_id}/resume/import", response_model=ImportResponse)
@@ -154,6 +203,19 @@ def save_resume(
     )
 
 
+@router.post("/{project_id}/resume/restore-from-profile", response_model=ResumeVersion)
+def restore_resume_from_profile(
+    project_id: str,
+    services: AppServices = Depends(get_services),
+) -> ResumeVersion:
+    """Reset the project delivery draft to the current experience library."""
+    _project_or_404(services, project_id)
+    try:
+        return services.repository.restore_from_profile(project_id)
+    except ProfileRequiredError as error:
+        raise HTTPException(422, detail={"code": "PROFILE_REQUIRED", "message": str(error)}) from error
+
+
 @router.get("/{project_id}/versions", response_model=list[ResumeVersion])
 def list_versions(project_id: str, services: AppServices = Depends(get_services)) -> list[ResumeVersion]:
     try:
@@ -184,12 +246,51 @@ async def analyze_project_job(
     provider = _provider_or_422(services, body.provider)
     try:
         analysis = await analyze_job(provider, project.company_name, project.job_description)
-    except JobEvidenceError as error:
-        raise HTTPException(422, detail={"code": "JD_EVIDENCE_INVALID", "message": str(error)}) from error
     except ProviderError as error:
         raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
-    services.repository.update(project_id, job_analysis=analysis)
+    project = services.repository.update(project_id, job_analysis=analysis, clear_match_report=True)
+    version = services.repository.get_active_version(project_id)
+    if version is not None:
+        try:
+            report = await analyze_evidence_match(provider, analysis, version.resume, version.facts)
+            services.repository.update(project_id, match_report=report)
+        except ProviderError as error:
+            raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
     return analysis
+
+
+@router.get("/{project_id}/match", response_model=MatchReport)
+def get_match(project_id: str, services: AppServices = Depends(get_services)) -> MatchReport:
+    project, version = _project_and_version(services, project_id)
+    if project.job_analysis is None:
+        raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
+    if project.match_report is not None:
+        return project.match_report
+    # Fallback until AI match has been generated.
+    return calculate_match(project.job_analysis, version.resume, version.facts)
+
+
+@router.post("/{project_id}/match", response_model=MatchReport)
+async def refresh_match(
+    project_id: str,
+    body: ProviderSelection,
+    services: AppServices = Depends(get_services),
+) -> MatchReport:
+    project, version = _project_and_version(services, project_id)
+    if project.job_analysis is None:
+        raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
+    provider = _provider_or_422(services, body.provider)
+    try:
+        report = await analyze_evidence_match(
+            provider,
+            project.job_analysis,
+            version.resume,
+            version.facts,
+        )
+    except ProviderError as error:
+        raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
+    services.repository.update(project_id, match_report=report)
+    return report
 
 
 @router.post("/{project_id}/questions")
@@ -221,14 +322,6 @@ def create_fact(
     )
 
 
-@router.get("/{project_id}/match", response_model=MatchReport)
-def get_match(project_id: str, services: AppServices = Depends(get_services)) -> MatchReport:
-    project, version = _project_and_version(services, project_id)
-    if project.job_analysis is None:
-        raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
-    return calculate_match(project.job_analysis, version.resume, version.facts)
-
-
 @router.post("/{project_id}/resume/suggest", response_model=ResumePatch)
 async def suggest_patch(
     project_id: str,
@@ -253,6 +346,36 @@ async def suggest_patch(
         raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
 
 
+@router.post("/{project_id}/resume/refine-operation", response_model=PatchDiscussionResult)
+async def refine_operation(
+    project_id: str,
+    body: PatchRefineInput,
+    services: AppServices = Depends(get_services),
+) -> PatchDiscussionResult:
+    project, version = _project_and_version(services, project_id)
+    if project.job_analysis is None:
+        raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
+    operation = next((item for item in body.patch.operations if item.id == body.operation_id), None)
+    if operation is None:
+        raise HTTPException(404, detail={"code": "OPERATION_NOT_FOUND", "message": "未找到该条建议"})
+    provider = _provider_or_422(services, body.provider)
+    try:
+        return await refine_patch_operation(
+            provider,
+            project.job_analysis,
+            version.resume,
+            version.facts,
+            operation,
+            body.message,
+            history=body.history,
+            application_type=project.application_type,
+        )
+    except UnsupportedFactError as error:
+        raise HTTPException(422, detail={"code": "FACT_EVIDENCE_INVALID", "message": str(error)}) from error
+    except ProviderError as error:
+        raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
+
+
 @router.post("/{project_id}/resume/apply-patch", response_model=ResumeVersion)
 def apply_patch(
     project_id: str,
@@ -267,6 +390,7 @@ def apply_patch(
             set(body.accepted_operation_ids),
             facts=version.facts,
         )
+        updated = tidy_resume_for_layout(updated)
     except PatchConflictError as error:
         raise HTTPException(409, detail={"code": "PATCH_CONFLICT", "message": str(error)}) from error
     except ValueError as error:
@@ -299,3 +423,16 @@ def _provider_or_422(services: AppServices, kind: str):
         return services.providers.resolve(kind)
     except ProviderConfigurationError as error:
         raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error
+
+
+def _configured_provider_or_422(services: AppServices):
+    state = services.providers.public_state()
+    if not state.configured or not state.kind:
+        raise HTTPException(
+            422,
+            detail={
+                "code": "PROVIDER_REQUIRED",
+                "message": "创建求职项目前请先在模型设置中连接 API 或 Codex；创建时会自动分析 JD 并做证据匹配",
+            },
+        )
+    return _provider_or_422(services, state.kind)

@@ -9,7 +9,7 @@ from resume_mvp.api.dependencies import (
     ProviderPublicState,
     get_services,
 )
-from resume_mvp.providers.base import ProviderError
+from resume_mvp.providers.base import ProviderError, ProviderTimeoutError
 
 
 router = APIRouter(prefix="/api/settings/providers", tags=["providers"])
@@ -43,9 +43,50 @@ class ProviderProbe(BaseModel):
     status: str
 
 
+class CodexModelOptionOutput(BaseModel):
+    slug: str
+    display_name: str
+    description: str = ""
+
+
+class CodexDetectOutput(BaseModel):
+    installed: bool
+    authenticated: bool
+    available: bool
+    version: str = ""
+    default_model: str = ""
+    binary_path: str = ""
+    models: list[CodexModelOptionOutput] = Field(default_factory=list)
+    message: str = ""
+
+
 @router.get("", response_model=ProviderSettingsOutput)
 def get_provider_settings(services: AppServices = Depends(get_services)) -> ProviderPublicState:
     return services.providers.public_state()
+
+
+@router.post("/codex/detect", response_model=CodexDetectOutput)
+async def detect_codex_cli() -> CodexDetectOutput:
+    from resume_mvp.providers.codex import detect_codex
+
+    result = await detect_codex()
+    return CodexDetectOutput(
+        installed=result.installed,
+        authenticated=result.authenticated,
+        available=result.available,
+        version=result.version,
+        default_model=result.default_model,
+        binary_path=result.binary_path,
+        models=[
+            CodexModelOptionOutput(
+                slug=item.slug,
+                display_name=item.display_name,
+                description=item.description,
+            )
+            for item in result.models
+        ],
+        message=result.message,
+    )
 
 
 @router.patch("", response_model=ProviderSettingsOutput)
@@ -78,12 +119,26 @@ async def test_provider(
     services: AppServices = Depends(get_services),
 ) -> ProviderProbe:
     try:
+        if body.provider == "codex":
+            from resume_mvp.providers.codex import CodexProvider, detect_codex
+
+            detection = await detect_codex(timeout=20)
+            if not detection.available:
+                raise ProviderError(detection.message or "Codex CLI 不可用")
+            provider = services.providers.resolve("codex")
+            if isinstance(provider, CodexProvider):
+                payload = await provider.probe(timeout=45)
+                return ProviderProbe(status=payload.get("status", "ok"))
+            return await provider.complete_json('仅返回 {"status":"ok"}', ProviderProbe)
+
         provider = services.providers.resolve(body.provider)
         return await provider.complete_json(
-            "仅返回 {\"status\":\"ok\"}",
+            '仅返回 {"status":"ok"}',
             ProviderProbe,
         )
     except ProviderConfigurationError as error:
         raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error
+    except ProviderTimeoutError as error:
+        raise HTTPException(504, detail={"code": "PROVIDER_TIMEOUT", "message": str(error)}) from error
     except ProviderError as error:
         raise HTTPException(502, detail={"code": "PROVIDER_UNAVAILABLE", "message": str(error)}) from error

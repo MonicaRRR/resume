@@ -5,7 +5,12 @@ import { api } from "../api/client";
 
 
 export function ProviderStatus() {
-  const query = useQuery({ queryKey: ["provider-settings"], queryFn: api.getProviderSettings });
+  const query = useQuery({
+    queryKey: ["provider-settings"],
+    queryFn: api.getProviderSettings,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
   const configured = query.data?.configured;
   return (
     <Link className={configured ? "provider-pill connected" : "provider-pill"} to="/settings">

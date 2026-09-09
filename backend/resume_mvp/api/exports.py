@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import base64
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 
 from resume_mvp.api.dependencies import AppServices, get_services
-from resume_mvp.domain import JobProject, ResumeVersion
+from resume_mvp.domain import JobProject, ResumeDocument, ResumeVersion
 from resume_mvp.exports import build_codex_handoff, build_docx, build_resume_json
-from resume_mvp.page_policy import evaluate_page_policy
+from resume_mvp.preview import (
+    PreviewConversionError,
+    convert_docx_to_pdf,
+    count_pdf_pages,
+    render_pdf_page_pngs,
+)
 from resume_mvp.repositories import ProjectNotFoundError
 
 
@@ -19,25 +25,33 @@ class HandoffResponse(BaseModel):
     markdown: str
 
 
+class PreviewPdfInput(BaseModel):
+    resume: ResumeDocument | None = None
+    template_id: str | None = None
+
+
+class ExportDocxInput(BaseModel):
+    resume: ResumeDocument | None = None
+    template_id: str | None = None
+
+
+class PreviewPagesResponse(BaseModel):
+    page_count: int = Field(ge=1)
+    pages: list[str]
+
+
 @router.post("/{project_id}/export/docx")
-def export_docx(project_id: str, services: AppServices = Depends(get_services)) -> Response:
+def export_docx(
+    project_id: str,
+    body: ExportDocxInput = Body(default_factory=ExportDocxInput),
+    services: AppServices = Depends(get_services),
+) -> Response:
+    """Export Word from the provided draft when present; otherwise the saved active version."""
     project, version = _active(services, project_id)
-    policy = evaluate_page_policy(version.resume, project.application_type)
-    if policy.overflow:
-        raise HTTPException(
-            422,
-            detail={
-                "code": "RESUME_OVERFLOW",
-                "message": "当前内容超过一页，请先使用一页优化建议精简排版",
-                "largest_sections": policy.largest_sections[:3],
-            },
-        )
+    resume = body.resume or version.resume
+    template_id = body.template_id or project.selected_template_id
     try:
-        content = build_docx(
-            version.resume,
-            project.selected_template_id,
-            project.application_type,
-        )
+        content = build_docx(resume, template_id, project.application_type)
     except Exception as error:
         raise HTTPException(500, detail={"code": "EXPORT_FAILED", "message": "DOCX 导出失败"}) from error
     if not content:
@@ -46,6 +60,56 @@ def export_docx(project_id: str, services: AppServices = Depends(get_services)) 
         content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": _attachment(f"{project.title}.docx")},
+    )
+
+
+@router.post("/{project_id}/preview/pdf")
+def preview_pdf(
+    project_id: str,
+    body: PreviewPdfInput,
+    services: AppServices = Depends(get_services),
+) -> Response:
+    """Build the same DOCX as export, convert to PDF for download / print."""
+    project, version = _active(services, project_id)
+    resume = body.resume or version.resume
+    template_id = body.template_id or project.selected_template_id
+    try:
+        pdf, pages = _build_preview_pdf(project, resume, template_id)
+    except PreviewConversionError as error:
+        raise HTTPException(503, detail={"code": "PREVIEW_UNAVAILABLE", "message": str(error)}) from error
+    except Exception as error:
+        raise HTTPException(500, detail={"code": "PREVIEW_FAILED", "message": "预览生成失败"}) from error
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": "inline; filename=resume-preview.pdf",
+            "X-Resume-Page-Count": str(pages),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/{project_id}/preview/pages", response_model=PreviewPagesResponse)
+def preview_pages(
+    project_id: str,
+    body: PreviewPdfInput,
+    services: AppServices = Depends(get_services),
+) -> PreviewPagesResponse:
+    """Word→PDF→PNG pages for reliable in-app preview (avoids black PDF iframes)."""
+    project, version = _active(services, project_id)
+    resume = body.resume or version.resume
+    template_id = body.template_id or project.selected_template_id
+    try:
+        pdf, _pages = _build_preview_pdf(project, resume, template_id)
+        pngs = render_pdf_page_pngs(pdf)
+    except PreviewConversionError as error:
+        raise HTTPException(503, detail={"code": "PREVIEW_UNAVAILABLE", "message": str(error)}) from error
+    except Exception as error:
+        raise HTTPException(500, detail={"code": "PREVIEW_FAILED", "message": "预览生成失败"}) from error
+    return PreviewPagesResponse(
+        page_count=len(pngs),
+        pages=[base64.b64encode(png).decode("ascii") for png in pngs],
     )
 
 
@@ -70,6 +134,16 @@ def codex_handoff(project_id: str, services: AppServices = Depends(get_services)
             version.facts,
         )
     )
+
+
+def _build_preview_pdf(
+    project: JobProject,
+    resume: ResumeDocument,
+    template_id: str,
+) -> tuple[bytes, int]:
+    docx = build_docx(resume, template_id, project.application_type)
+    pdf = convert_docx_to_pdf(docx)
+    return pdf, count_pdf_pages(pdf)
 
 
 def _active(services: AppServices, project_id: str) -> tuple[JobProject, ResumeVersion]:
