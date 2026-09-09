@@ -42,3 +42,14 @@ test("从经历开始使用分字段表单并支持大段经历描述", async ()
   expect(resume.skills[0].items.map((item: { value: string }) => item.value)).toContain("Python");
   expect(facts.length).toBeGreaterThan(0);
 });
+
+
+test("教育经历年份范围从 1960 到当前年份", async () => {
+  const user = userEvent.setup();
+  render(<ResumeIntake onUpload={vi.fn()} onCreate={vi.fn()} />);
+  await user.click(screen.getByRole("button", { name: /从经历开始/ }));
+
+  const range = `1960-${new Date().getFullYear()}`;
+  expect(screen.getByLabelText("入学时间 1 年")).toHaveAttribute("placeholder", range);
+  expect(screen.getByLabelText("毕业时间 1 年")).toHaveAttribute("placeholder", range);
+});

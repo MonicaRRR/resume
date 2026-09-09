@@ -346,6 +346,7 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`入学时间 ${index + 1}`}
                   precision="month"
+                  minYear={1960}
                   value={item.start_date}
                   onChange={(start_date) => setEducation(education.map((entry) => entry.id === item.id ? { ...entry, start_date } : entry))}
                 />
@@ -354,6 +355,7 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`毕业时间 ${index + 1}`}
                   precision="month"
+                  minYear={1960}
                   value={item.end_date}
                   onChange={(end_date) => setEducation(education.map((entry) => entry.id === item.id ? { ...entry, end_date } : entry))}
                 />

@@ -216,6 +216,7 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                 <AppleDateParts
                   aria-label={`入学时间 ${index + 1}`}
                   precision="month"
+                  minYear={1960}
                   value={item.start_date}
                   onChange={(start_date) => commit((draft) => { draft.education[index].start_date = start_date; })}
                 />
@@ -224,6 +225,7 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                 <AppleDateParts
                   aria-label={`毕业时间 ${index + 1}`}
                   precision="month"
+                  minYear={1960}
                   value={item.end_date}
                   onChange={(end_date) => commit((draft) => { draft.education[index].end_date = end_date; })}
                 />
