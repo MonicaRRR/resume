@@ -27,3 +27,10 @@
 ## Concerns
 
 - 完整后端测试仍有 8 个既有 API 测试失败，建议后续排查项目创建端点返回错误的问题。
+
+## 修复轮 1
+
+- RED：新增 `test_stops_at_hard_iteration_two_even_if_budget_is_larger` 后，旧实现运行 `uv run pytest tests/test_optimization_quality.py -v` 为 1 failed / 8 passed；失败为 `iteration=2,max_refinements=3` 得到 `True`。
+- 同时将连续无改善测试改为 `iteration=1,max_refinements=2`，确保预算未耗尽时实际执行无改善停止分支。
+- GREEN：将 `should_refine` 的预算限制改为 `min(max_refinements, 2)`，并运行 `uv run pytest tests/test_optimization_quality.py tests/test_matching.py tests/test_patches.py -v`，24 passed。
+- 修复文件：`backend/resume_mvp/optimization_quality.py`、`backend/tests/test_optimization_quality.py`。

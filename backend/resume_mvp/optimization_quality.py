@@ -9,6 +9,8 @@ from resume_mvp.optimization_models import (
     QualityGateResult,
 )
 
+_HARD_MAX_REFINEMENTS = 2
+
 
 def evaluate_quality(
     patch: ResumePatch,
@@ -79,11 +81,12 @@ def should_refine(
     history: Sequence[QualityGateResult], iteration: int, max_refinements: int
 ) -> bool:
     """Return whether another bounded refinement should be attempted."""
+    refinement_limit = min(max_refinements, _HARD_MAX_REFINEMENTS)
     if not history:
-        return iteration < max_refinements
+        return iteration < refinement_limit
 
     latest = history[-1]
-    if latest.passed or iteration >= max_refinements:
+    if latest.passed or iteration >= refinement_limit:
         return False
 
     # Once two consecutive refinements fail to improve the quality tuple,

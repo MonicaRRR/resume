@@ -144,7 +144,11 @@ def test_refines_until_quality_passes_or_budget_is_exhausted() -> None:
     assert should_refine([_quality()], iteration=2, max_refinements=2) is False
 
 
+def test_stops_at_hard_iteration_two_even_if_budget_is_larger() -> None:
+    assert should_refine([_quality()], iteration=2, max_refinements=3) is False
+
+
 def test_stops_after_two_non_improving_refinements() -> None:
     history = [_quality(expression_score=72), _quality(expression_score=72), _quality(expression_score=71)]
 
-    assert should_refine(history, iteration=2, max_refinements=2) is False
+    assert should_refine(history, iteration=1, max_refinements=2) is False
