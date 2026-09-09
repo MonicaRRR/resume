@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from resume_mvp.layout_analysis import pdf_page_count
+
 
 class PreviewConversionError(RuntimeError):
     pass
@@ -57,13 +59,7 @@ def convert_docx_to_pdf(docx_bytes: bytes, *, timeout: float = 90) -> bytes:
 
 
 def count_pdf_pages(pdf_bytes: bytes) -> int:
-    import fitz
-
-    document = fitz.open(stream=pdf_bytes, filetype="pdf")
-    try:
-        return max(1, document.page_count)
-    finally:
-        document.close()
+    return pdf_page_count(pdf_bytes)
 
 
 def render_pdf_page_pngs(pdf_bytes: bytes, *, dpi: float = 144) -> list[bytes]:
