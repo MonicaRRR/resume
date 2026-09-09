@@ -43,6 +43,21 @@ async def test_openai_provider_posts_chat_completions_and_validates_json() -> No
     assert result.items == ["Python"]
 
 
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        ("https://open.bigmodel.cn/api/paas/v4/", "https://open.bigmodel.cn/api/paas/v4/chat/completions"),
+        ("https://open.bigmodel.cn/api/paas/v4/chat/completions", "https://open.bigmodel.cn/api/paas/v4/chat/completions"),
+        ("https://api.openai.com/v1", "https://api.openai.com/v1/chat/completions"),
+        ("https://gateway.example.com", "https://gateway.example.com/v1/chat/completions"),
+    ],
+)
+def test_chat_url_supports_versioned_and_complete_compatible_endpoints(base_url: str, expected: str) -> None:
+    provider = OpenAICompatibleProvider(base_url=base_url, api_key="secret", model="demo")
+
+    assert provider._chat_url() == expected
+
+
 @pytest.mark.anyio
 async def test_openai_provider_maps_auth_error_without_leaking_key() -> None:
     """Catches secret-bearing upstream failures reaching logs or the interface."""

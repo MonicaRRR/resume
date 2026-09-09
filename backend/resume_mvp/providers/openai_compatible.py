@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TypeVar
 
 import httpx
@@ -80,6 +81,8 @@ class OpenAICompatibleProvider:
         return validate_json_response(content, schema)
 
     def _chat_url(self) -> str:
-        if self.base_url.endswith("/v1"):
+        if self.base_url.endswith("/chat/completions"):
+            return self.base_url
+        if re.search(r"/v\d+(?:\.\d+)?$", self.base_url):
             return f"{self.base_url}/chat/completions"
         return f"{self.base_url}/v1/chat/completions"
