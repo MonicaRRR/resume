@@ -40,12 +40,14 @@ class OpenAICompatibleProvider:
         self.temperature = temperature
         self._client = client
         self.last_usage: ProviderUsage | None = None
+        self.actual_call_count = 0
 
     async def complete_json(self, prompt: str, schema: type[T]) -> T:
         self.last_usage = None
         client = self._client or httpx.AsyncClient()
         owns_client = self._client is None
         try:
+            self.actual_call_count += 1
             response = await client.post(
                 self._chat_url(),
                 headers={

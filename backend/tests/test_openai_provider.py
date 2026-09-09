@@ -4,8 +4,10 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from resume_mvp.provider_retry import RetryingProvider
 from resume_mvp.providers.base import (
     ProviderAuthError,
+    ProviderFormatError,
     ProviderNetworkError,
     ProviderRateLimitError,
     ProviderServerError,
@@ -151,3 +153,29 @@ async def test_openai_provider_exposes_optional_usage_without_fabricating_values
     await client.aclose()
 
     assert provider.last_usage is None
+
+
+@pytest.mark.anyio
+async def test_openai_usage_is_counted_when_structured_response_validation_fails() -> None:
+    """A billed malformed structured response must contribute usage before format repair begins."""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": '{\"items\": 7}'}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+                },
+            )
+        )
+    )
+    wrapped = RetryingProvider(
+        OpenAICompatibleProvider(base_url="http://model.local", api_key="secret", model="demo-model", client=client)
+    )
+
+    with pytest.raises(ProviderFormatError):
+        await wrapped.complete_json("提取技能", SkillList)
+    await client.aclose()
+
+    assert wrapped.stats.call_count == 1
+    assert wrapped.stats.usage == ProviderUsage(input_tokens=5, output_tokens=3)

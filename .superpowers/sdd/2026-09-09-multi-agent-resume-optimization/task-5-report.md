@@ -28,3 +28,13 @@
 ## Concerns
 
 - `ProviderCallStats.usage` 仅累加 provider 实际返回的 token 字段；缺失字段保持不可用，避免将未知消耗误报为零。
+
+## Fix round 1
+
+- `ProviderServerError` 现在只在状态码为 5xx 时重试；404 等非 5xx 立即抛出，且只记录一次底层调用。
+- jitter 应用后再强制 `max_delay_seconds`，确保传给 sleep 的最终延迟绝不超过上限。
+- 每次 facade 调用无论成功、可重试失败或格式失败，都会在 `finally` 中采集该次 usage。OpenAI 已在结构化 JSON 验证前写入本次响应 usage，因此 workflow 随后的单次 JSON repair 不会漏记首个已计费响应。
+- 用量聚合改为保守规则：任一次调用缺少某个 token 分量，该总分量即保持未知；不会以早先的部分和伪装成完整总量。
+- Codex 与 OpenAI provider 暴露可选累计 `actual_call_count`。包装器优先使用本次调用前后的增量；不提供该字段的普通 `AIProvider` 仍按一次 facade 调用计数。覆盖了 Codex schema fallback 成功及 fallback 格式失败时均为两次 runner 调用的路径。
+- RED：新增上述回归后，`uv run pytest tests/test_provider_retry.py tests/test_openai_provider.py -v` 为 7 failed / 19 passed，失败与五项评审问题逐项对应。
+- GREEN：同一聚焦集为 26 passed；`uv run pytest tests/test_provider_retry.py tests/test_openai_provider.py tests/test_provider_api.py tests/test_codex_provider.py -v` 为 45 passed，6 个既有依赖弃用警告；`git diff --check` 通过。

@@ -538,6 +538,7 @@ class CodexProvider:
         self.temp_parent = temp_parent
         self.timeout = timeout
         self.model = model
+        self.actual_call_count = 0
 
     async def complete_json(self, prompt: str, schema: type[T]) -> T:
         try:
@@ -578,6 +579,7 @@ class CodexProvider:
             if self.model:
                 command.extend(["--model", self.model])
             try:
+                self.actual_call_count += 1
                 result = await self.runner.run(
                     command,
                     stdin=prompt if use_schema else f"{prompt}\n\n请只输出符合目标结构的 JSON，不要 Markdown。",
