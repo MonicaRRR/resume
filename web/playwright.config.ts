@@ -20,7 +20,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: "uv run uvicorn resume_mvp.main:app --host 127.0.0.1 --port 8000",
+      command: ".venv/bin/uvicorn resume_mvp.main:app --host 127.0.0.1 --port 8000",
       cwd: resolve(currentDirectory, "../backend"),
       env: {
         RESUME_MVP_TEST_PROVIDER: "1",
@@ -28,12 +28,14 @@ export default defineConfig({
       },
       url: "http://127.0.0.1:8000/api/health",
       reuseExistingServer: false,
+      timeout: 120_000,
     },
     {
-      command: "pnpm dev",
+      command: "pnpm exec vite --host 127.0.0.1 --port 5173",
       cwd: currentDirectory,
       url: "http://127.0.0.1:5173",
       reuseExistingServer: false,
+      timeout: 120_000,
     },
   ],
 });

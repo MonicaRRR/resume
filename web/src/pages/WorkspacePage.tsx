@@ -457,7 +457,7 @@ export function WorkspacePage() {
               <p className="panel-note">正式投递推荐导出 <strong>Word（DOCX）</strong>；右侧是同一份 Word 转成的真实 PDF 分页预览。</p>
               <div className="export-grid">
                 <button onClick={() => draft && void downloadDraftDocx(id, draft, project.selected_template_id, `${project.title}.docx`)} disabled={!draft}><span>DOCX</span><strong>下载 Word 简历</strong><small>与右侧预览同源，含当前基础信息</small></button>
-                <button onClick={() => void downloadPreviewPdf(id, draft, project.selected_template_id, `${project.title}.pdf`)} disabled={!draft}><span>PDF</span><strong>下载 PDF 预览稿</strong><small>与右侧预览同源排版</small></button>
+                <button onClick={() => draft && void downloadPreviewPdf(id, draft, project.selected_template_id, `${project.title}.pdf`)} disabled={!draft}><span>PDF</span><strong>下载 PDF 预览稿</strong><small>与右侧预览同源排版</small></button>
                 <button onClick={() => downloadFile(`/api/projects/${id}/export/json`, `${project.title}.json`)}><span>JSON</span><strong>下载结构化简历</strong><small>不包含模型密钥</small></button>
                 <button onClick={() => copyHandoff(false)}><span>CODEX</span><strong>复制 Codex 上下文</strong><small>交给 Codex 聊天继续优化</small></button>
                 <button onClick={() => copyHandoff(true)}><span>MD</span><strong>下载 Codex 上下文</strong><small>仅供 AI 协作，非投递稿</small></button>

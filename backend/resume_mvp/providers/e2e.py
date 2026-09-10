@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TypeVar
 
@@ -16,6 +17,7 @@ from resume_mvp.domain import (
     QuestionList,
     ResumePatch,
 )
+from resume_mvp.optimization_models import OptimizationReview
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -23,6 +25,9 @@ T = TypeVar("T", bound=BaseModel)
 
 class E2EProvider:
     """Deterministic model used only by the opt-in browser test server."""
+
+    def __init__(self) -> None:
+        self._review_calls = 0
 
     async def complete_json(self, prompt: str, schema: type[T]) -> T:
         payload = _input_payload(prompt)
@@ -96,6 +101,21 @@ class E2EProvider:
                             "risk": "low",
                         }
                     ]
+                )
+            )
+        if schema is OptimizationReview:
+            self._review_calls += 1
+            # Keep reviewing visible long enough for the 1s UI poll.
+            await asyncio.sleep(1.5)
+            # First deep-review fails the expression gate; the refinement passes.
+            score = 72 if self._review_calls == 1 else 88
+            return schema.model_validate(
+                OptimizationReview(
+                    factuality_passed=True,
+                    expression_score=score,
+                    requires_user_input=False,
+                    rejection_reasons=[] if score >= 80 else ["综合表达评分不足 80 分"],
+                    refinement_instructions=[] if score >= 80 else ["压缩空话并保留量化结果"],
                 )
             )
         if schema is PatchDiscussionResult:

@@ -16,6 +16,7 @@ test("展示本地项目及其求职类型", async () => {
       application_type: "campus",
       job_description: "负责 Python API",
       job_analysis: null,
+      match_report: null,
       active_resume_version_id: null,
       selected_template_id: "clear-single",
       created_at: "2026-08-23T00:00:00Z",

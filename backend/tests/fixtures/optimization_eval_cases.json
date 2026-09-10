@@ -1,0 +1,485 @@
+[
+  {
+    "name": "campus-pass",
+    "application_type": "campus",
+    "job_analysis": {
+      "role_title": "后端工程师",
+      "seniority": "",
+      "responsibilities": [],
+      "requirements": [
+        {
+          "id": "req-1",
+          "text": "Python API 开发",
+          "evidence_quote": "Python API",
+          "weight": 2.0,
+          "inferred": false
+        }
+      ],
+      "bonus_skills": [],
+      "keywords": [],
+      "interview_topics": [],
+      "written_topics": []
+    },
+    "resume": {
+      "basics": {
+        "name": "张宁",
+        "gender": "",
+        "birthday": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "wechat": "",
+        "political_status": "",
+        "photo_data_url": "",
+        "target_role": {
+          "value": "",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1.0
+        },
+        "summary": {
+          "value": "后端开发",
+          "source_fact_ids": [
+            "fact-1"
+          ],
+          "origin": "manual",
+          "confidence": 1.0
+        }
+      },
+      "education": [],
+      "work_experience": [],
+      "projects": [],
+      "skills": [],
+      "certificates": [],
+      "awards": [],
+      "custom_sections": [],
+      "section_order": [
+        "basics",
+        "education",
+        "skills",
+        "work_experience",
+        "projects"
+      ],
+      "layout_profile": {
+        "source_kind": "builtin",
+        "font_family": "",
+        "heading_font_family": "",
+        "accent_color": "",
+        "base_font_size": null,
+        "line_height": null,
+        "columns": 1,
+        "imported": false
+      }
+    },
+    "facts": [
+      {
+        "id": "fact-1",
+        "category": "项目经历",
+        "statement": "用 Python 完成订单 API",
+        "source_type": "manual",
+        "source_location": "",
+        "user_confirmed": true
+      }
+    ],
+    "candidate_patch": {
+      "operations": [
+        {
+          "id": "op-1",
+          "op": "replace",
+          "path": "/basics/summary",
+          "before": {
+            "value": "后端开发",
+            "source_fact_ids": [
+              "fact-1"
+            ],
+            "origin": "manual",
+            "confidence": 1
+          },
+          "after": {
+            "value": "用 Python 完成订单 API",
+            "source_fact_ids": [
+              "fact-1"
+            ],
+            "origin": "ai_rewrite",
+            "confidence": 1
+          },
+          "reason": "对齐 JD",
+          "jd_requirement_ids": [
+            "req-1"
+          ],
+          "source_fact_ids": [
+            "fact-1"
+          ],
+          "layout_issue_ids": [],
+          "expected_layout_benefit": "",
+          "risk": "low"
+        }
+      ],
+      "experience_asks": []
+    },
+    "candidate_match": {
+      "coverage": 0.9,
+      "items": [
+        {
+          "requirement_id": "req-1",
+          "requirement": "Python API 开发",
+          "status": "已有证据",
+          "fact_ids": [
+            "fact-1"
+          ],
+          "excerpts": [],
+          "reason": "",
+          "weight": 2.0
+        }
+      ]
+    },
+    "layout_report": {
+      "page_count": 1,
+      "density_by_page": [
+        0.82
+      ],
+      "issues": [],
+      "severe_issue_count": 0
+    },
+    "review": {
+      "factuality_passed": true,
+      "expression_score": 88,
+      "requires_user_input": false,
+      "questions": [],
+      "rejection_reasons": [],
+      "refinement_instructions": []
+    },
+    "expected_quality": {
+      "passed": true,
+      "factuality_passed": true,
+      "traceability": 1.0,
+      "jd_coverage": 0.9,
+      "expression_score": 88,
+      "page_policy_passed": true,
+      "severe_layout_issues": 0,
+      "reasons": []
+    }
+  },
+  {
+    "name": "internship-one-page-overflow",
+    "application_type": "internship",
+    "job_analysis": {
+      "role_title": "后端工程师",
+      "seniority": "",
+      "responsibilities": [],
+      "requirements": [
+        {
+          "id": "req-1",
+          "text": "Python API 开发",
+          "evidence_quote": "Python API",
+          "weight": 2.0,
+          "inferred": false
+        }
+      ],
+      "bonus_skills": [],
+      "keywords": [],
+      "interview_topics": [],
+      "written_topics": []
+    },
+    "resume": {
+      "basics": {
+        "name": "张宁",
+        "gender": "",
+        "birthday": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "wechat": "",
+        "political_status": "",
+        "photo_data_url": "",
+        "target_role": {
+          "value": "",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1.0
+        },
+        "summary": {
+          "value": "后端开发",
+          "source_fact_ids": [
+            "fact-1"
+          ],
+          "origin": "manual",
+          "confidence": 1.0
+        }
+      },
+      "education": [],
+      "work_experience": [],
+      "projects": [],
+      "skills": [],
+      "certificates": [],
+      "awards": [],
+      "custom_sections": [],
+      "section_order": [
+        "basics",
+        "education",
+        "skills",
+        "work_experience",
+        "projects"
+      ],
+      "layout_profile": {
+        "source_kind": "builtin",
+        "font_family": "",
+        "heading_font_family": "",
+        "accent_color": "",
+        "base_font_size": null,
+        "line_height": null,
+        "columns": 1,
+        "imported": false
+      }
+    },
+    "facts": [
+      {
+        "id": "fact-1",
+        "category": "项目经历",
+        "statement": "用 Python 完成订单 API",
+        "source_type": "manual",
+        "source_location": "",
+        "user_confirmed": true
+      }
+    ],
+    "candidate_patch": {
+      "operations": [
+        {
+          "id": "op-1",
+          "op": "replace",
+          "path": "/basics/summary",
+          "before": {
+            "value": "后端开发",
+            "source_fact_ids": [
+              "fact-1"
+            ],
+            "origin": "manual",
+            "confidence": 1
+          },
+          "after": {
+            "value": "用 Python 完成订单 API",
+            "source_fact_ids": [
+              "fact-1"
+            ],
+            "origin": "ai_rewrite",
+            "confidence": 1
+          },
+          "reason": "对齐 JD",
+          "jd_requirement_ids": [
+            "req-1"
+          ],
+          "source_fact_ids": [
+            "fact-1"
+          ],
+          "layout_issue_ids": [],
+          "expected_layout_benefit": "",
+          "risk": "low"
+        }
+      ],
+      "experience_asks": []
+    },
+    "candidate_match": {
+      "coverage": 0.9,
+      "items": [
+        {
+          "requirement_id": "req-1",
+          "requirement": "Python API 开发",
+          "status": "已有证据",
+          "fact_ids": [
+            "fact-1"
+          ],
+          "excerpts": [],
+          "reason": "",
+          "weight": 2.0
+        }
+      ]
+    },
+    "layout_report": {
+      "page_count": 2,
+      "density_by_page": [
+        0.7,
+        0.2
+      ],
+      "issues": [],
+      "severe_issue_count": 0
+    },
+    "review": {
+      "factuality_passed": true,
+      "expression_score": 88,
+      "requires_user_input": false,
+      "questions": [],
+      "rejection_reasons": [],
+      "refinement_instructions": []
+    },
+    "expected_quality": {
+      "passed": false,
+      "factuality_passed": true,
+      "traceability": 1.0,
+      "jd_coverage": 0.9,
+      "expression_score": 88,
+      "page_policy_passed": false,
+      "severe_layout_issues": 0,
+      "reasons": [
+        "校招/实习简历超过一页"
+      ]
+    }
+  },
+  {
+    "name": "experienced-untraceable",
+    "application_type": "experienced",
+    "job_analysis": {
+      "role_title": "后端工程师",
+      "seniority": "",
+      "responsibilities": [],
+      "requirements": [
+        {
+          "id": "req-1",
+          "text": "Python API 开发",
+          "evidence_quote": "Python API",
+          "weight": 2.0,
+          "inferred": false
+        }
+      ],
+      "bonus_skills": [],
+      "keywords": [],
+      "interview_topics": [],
+      "written_topics": []
+    },
+    "resume": {
+      "basics": {
+        "name": "张宁",
+        "gender": "",
+        "birthday": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "wechat": "",
+        "political_status": "",
+        "photo_data_url": "",
+        "target_role": {
+          "value": "",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1.0
+        },
+        "summary": {
+          "value": "后端开发",
+          "source_fact_ids": [
+            "fact-1"
+          ],
+          "origin": "manual",
+          "confidence": 1.0
+        }
+      },
+      "education": [],
+      "work_experience": [],
+      "projects": [],
+      "skills": [],
+      "certificates": [],
+      "awards": [],
+      "custom_sections": [],
+      "section_order": [
+        "basics",
+        "education",
+        "skills",
+        "work_experience",
+        "projects"
+      ],
+      "layout_profile": {
+        "source_kind": "builtin",
+        "font_family": "",
+        "heading_font_family": "",
+        "accent_color": "",
+        "base_font_size": null,
+        "line_height": null,
+        "columns": 1,
+        "imported": false
+      }
+    },
+    "facts": [
+      {
+        "id": "fact-1",
+        "category": "项目经历",
+        "statement": "用 Python 完成订单 API",
+        "source_type": "manual",
+        "source_location": "",
+        "user_confirmed": true
+      }
+    ],
+    "candidate_patch": {
+      "operations": [
+        {
+          "id": "op-2",
+          "op": "replace",
+          "path": "/basics/summary",
+          "before": {
+            "value": "后端开发",
+            "source_fact_ids": [
+              "fact-1"
+            ],
+            "origin": "manual",
+            "confidence": 1
+          },
+          "after": {
+            "value": "虚构了十倍性能提升",
+            "source_fact_ids": [],
+            "origin": "ai_rewrite",
+            "confidence": 1
+          },
+          "reason": "夸大",
+          "jd_requirement_ids": [],
+          "source_fact_ids": [],
+          "layout_issue_ids": [],
+          "expected_layout_benefit": "",
+          "risk": "low"
+        }
+      ],
+      "experience_asks": []
+    },
+    "candidate_match": {
+      "coverage": 0.9,
+      "items": [
+        {
+          "requirement_id": "req-1",
+          "requirement": "Python API 开发",
+          "status": "已有证据",
+          "fact_ids": [
+            "fact-1"
+          ],
+          "excerpts": [],
+          "reason": "",
+          "weight": 2.0
+        }
+      ]
+    },
+    "layout_report": {
+      "page_count": 2,
+      "density_by_page": [
+        0.7,
+        0.2
+      ],
+      "issues": [],
+      "severe_issue_count": 0
+    },
+    "review": {
+      "factuality_passed": true,
+      "expression_score": 88,
+      "requires_user_input": false,
+      "questions": [],
+      "rejection_reasons": [],
+      "refinement_instructions": []
+    },
+    "expected_quality": {
+      "passed": false,
+      "factuality_passed": false,
+      "traceability": 0.0,
+      "jd_coverage": 0.9,
+      "expression_score": 88,
+      "page_policy_passed": true,
+      "severe_layout_issues": 0,
+      "reasons": [
+        "存在无事实依据的修改"
+      ]
+    }
+  }
+]
