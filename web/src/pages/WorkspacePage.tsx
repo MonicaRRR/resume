@@ -4,13 +4,16 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { api, ApiError, downloadDraftDocx, downloadFile, downloadPreviewPdf } from "../api/client";
 import { JobAnalysisPanel } from "../components/JobAnalysisPanel";
+import { OptimizationLauncher } from "../components/OptimizationLauncher";
+import { OptimizationProgress } from "../components/OptimizationProgress";
 import { PatchReview } from "../components/PatchReview";
 import { ResumeEditor } from "../components/ResumeEditor";
 import { ResumePreview } from "../components/ResumePreview";
 import { TemplatePicker } from "../components/TemplatePicker";
 import { AppleAlert } from "../components/ui/AppleAlert";
+import { useOptimizationRun } from "../hooks/useOptimizationRun";
 import { recommendTemplate } from "../templates/registry";
-import type { ResumeDocument, ResumePatch } from "../types";
+import type { OptimizationMode, ResumeDocument, ResumePatch } from "../types";
 
 
 type Stage = "job" | "facts" | "match" | "optimize" | "export" | "practice";
@@ -43,6 +46,8 @@ export function WorkspacePage() {
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const matchBootstrapped = useRef(false);
+  const transferredRunId = useRef<string | null>(null);
+  const optimization = useOptimizationRun(id);
 
   const projectQuery = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), enabled: Boolean(id) });
   const versionsQuery = useQuery({ queryKey: ["versions", id], queryFn: () => api.getVersions(id), enabled: Boolean(id) });
@@ -70,6 +75,16 @@ export function WorkspacePage() {
   useEffect(() => {
     if (activeVersion) setDraft(structuredClone(activeVersion.resume));
   }, [activeVersion?.id]);
+
+  useEffect(() => {
+    const run = optimization.run;
+    if (!run || run.status !== "ready_for_user" || !run.patch) return;
+    if (transferredRunId.current === run.id) return;
+    transferredRunId.current = run.id;
+    setPatch(run.patch);
+    setStage("optimize");
+    setMessage("优化已完成，请逐条确认修改；未同意前不会写入正式版本。");
+  }, [optimization.run]);
 
   const recommendation = useMemo(
     () => draft ? recommendTemplate(draft, project?.job_analysis ?? null) : null,
@@ -161,10 +176,26 @@ export function WorkspacePage() {
     });
   }
 
-  async function suggest() {
+  async function startOptimization(mode: OptimizationMode) {
     await run("suggest", async () => {
-      setPatch(await api.suggestPatch(id, provider));
+      transferredRunId.current = null;
+      setPatch(null);
       setStage("optimize");
+      await optimization.start(mode, provider);
+    });
+  }
+
+  async function cancelOptimization() {
+    await run("cancel-opt", async () => {
+      await optimization.cancel();
+      setMessage("已请求取消当前优化。");
+    });
+  }
+
+  async function resumeOptimization() {
+    await run("resume-opt", async () => {
+      await optimization.resume();
+      setMessage("已继续未完成的优化。");
     });
   }
 
@@ -329,7 +360,7 @@ export function WorkspacePage() {
                   <p>匹配以 AI 为主，学历/技能/全栈等硬条件由规则校正。建议默认不生效，需你在「建议确认」逐项同意。</p>
                 </div>
                 <div className="button-row">
-                  <button className="primary-button" disabled={busy === "suggest"} onClick={suggest}>生成适配建议</button>
+                  <button className="primary-button" disabled={!project.job_analysis || !providerQuery.data?.configured} onClick={() => setStage("optimize")}>生成适配建议</button>
                   <button className="secondary-button" type="button" disabled={busy === "match" || !providerQuery.data?.configured} onClick={refreshMatch}>
                     {busy === "match" ? "正在匹配…" : "重新匹配证据"}
                   </button>
@@ -383,6 +414,13 @@ export function WorkspacePage() {
             </section>}
 
             {stage === "optimize" && draft && <>
+              {optimization.run && (
+                <OptimizationProgress
+                  run={optimization.run}
+                  onCancel={cancelOptimization}
+                  onResume={resumeOptimization}
+                />
+              )}
               {patch ? (
                 <PatchReview
                   patch={patch}
@@ -394,15 +432,21 @@ export function WorkspacePage() {
                   busy={busy === "apply"}
                 />
               ) : (
-                <div className="action-strip">
-                  <div>
-                    <strong>针对当前岗位讨论改写方案</strong>
-                    <p>请先在「匹配分析」生成建议；也可在此重新生成。每条都要你同意才会写入。</p>
-                  </div>
-                  <button className="primary-button" disabled={!project.job_analysis || busy === "suggest"} onClick={suggest}>生成适配建议</button>
-                </div>
+                <OptimizationLauncher
+                  disabled={!project.job_analysis || !providerQuery.data?.configured}
+                  busy={busy === "suggest" || Boolean(optimization.run && !["ready_for_user", "failed", "cancelled", "waiting_for_user"].includes(optimization.run.status))}
+                  onStart={startOptimization}
+                />
               )}
-              <TemplatePicker selected={project.selected_template_id} recommended={recommendation?.id} onChange={selectTemplate} />
+              <TemplatePicker
+                selected={project.selected_template_id}
+                recommended={recommendation?.id}
+                onChange={selectTemplate}
+                disabled={Boolean(
+                  optimization.run
+                  && !["ready_for_user", "failed", "cancelled", "waiting_for_user"].includes(optimization.run.status),
+                )}
+              />
               {recommendation && <p className="recommendation-reason">推荐理由：{recommendation.reason}。手动选择始终优先。</p>}
             </>}
 

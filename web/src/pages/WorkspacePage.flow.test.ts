@@ -26,5 +26,8 @@ describe("WorkspacePage stage flow", () => {
     expect(workspaceSource).toContain("生成适配建议");
     expect(workspaceSource).toContain("refreshMatch");
     expect(workspaceSource).toContain("重新匹配证据");
+    expect(workspaceSource).toContain("startOptimization");
+    expect(workspaceSource).toContain("OptimizationLauncher");
+    expect(workspaceSource).toContain("OptimizationProgress");
   });
 });
