@@ -133,21 +133,37 @@ class OptimizationOrchestrator:
         return self.repository.create_optimization_run(run)
 
     async def cancel(self, run_id: str) -> OptimizationRun:
+        run = self.repository.get_optimization_run(run_id)
+        if run.status in {"cancelled", "ready_for_user", "failed"}:
+            return run
         return self.repository.request_optimization_cancel(run_id)
 
-    async def resume(self, run_id: str) -> OptimizationRun:
+    async def prepare_resume(self, run_id: str) -> OptimizationRun:
+        """Re-queue a waiting or interrupted run without executing model calls."""
         run = self.repository.get_optimization_run(run_id)
-        if run.status != "waiting_for_user":
-            raise ValueError("只有等待用户补充事实的任务可以恢复")
-        project = self.repository.get(run.project_id)
-        active_id = project.active_resume_version_id
-        if active_id and active_id != run.input_version_id:
-            run = self.repository.adopt_optimization_input_version(run_id, active_id)
-        run = self.repository.update_optimization_run(
-            run.id,
-            status="queued",
-            message="已采纳最新事实版本，继续优化",
-        )
+        if run.status == "waiting_for_user":
+            project = self.repository.get(run.project_id)
+            active_id = project.active_resume_version_id
+            if active_id and active_id != run.input_version_id:
+                run = self.repository.adopt_optimization_input_version(run_id, active_id)
+            return self.repository.update_optimization_run(
+                run.id,
+                status="queued",
+                cancel_requested=False,
+                message="已采纳最新事实版本，继续优化",
+            )
+        if run.status == "failed":
+            # Interrupted runs keep the frozen input version.
+            return self.repository.update_optimization_run(
+                run.id,
+                status="queued",
+                cancel_requested=False,
+                message="继续未完成的优化",
+            )
+        raise ValueError("只有等待用户补充事实或中断失败的任务可以恢复")
+
+    async def resume(self, run_id: str) -> OptimizationRun:
+        run = await self.prepare_resume(run_id)
         return await self.execute(run.id)
 
     async def execute(self, run_id: str) -> OptimizationRun:

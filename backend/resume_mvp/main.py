@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from resume_mvp.api.dependencies import AppServices, ProviderRegistry
 from resume_mvp.api.exports import router as exports_router
+from resume_mvp.api.optimization import router as optimization_router
 from resume_mvp.api.practice import router as practice_router
 from resume_mvp.api.profile import router as profile_router
 from resume_mvp.api.projects import router as projects_router
@@ -40,6 +41,8 @@ def create_app(
         default_test_kind=default_test_kind,
         persist_path=None if default_test_kind else root / PROVIDER_SETTINGS_FILE,
     )
+    # Recover from process death without auto-calling external providers.
+    repository.fail_stale_optimization_runs()
     app.state.services = AppServices(
         repository=repository,
         providers=provider_registry,
@@ -51,6 +54,7 @@ def create_app(
         return {"status": "ok", "service": "resume-mvp"}
 
     app.include_router(projects_router)
+    app.include_router(optimization_router)
     app.include_router(profile_router)
     app.include_router(providers_router)
     app.include_router(exports_router)

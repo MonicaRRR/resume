@@ -533,6 +533,42 @@ class ProjectRepository:
     def request_optimization_cancel(self, run_id: str) -> OptimizationRun:
         return self.update_optimization_run(run_id, cancel_requested=True)
 
+    def fail_stale_optimization_runs(
+        self,
+        *,
+        message: str = "上次运行被中断，可点击继续",
+    ) -> list[OptimizationRun]:
+        """Mark in-flight runs as failed after process restart; do not call providers."""
+        active = (
+            "queued",
+            "analyzing",
+            "optimizing",
+            "rendering",
+            "reviewing",
+            "retry_wait",
+        )
+        with self._sessions() as session:
+            records = list(
+                session.scalars(
+                    select(OptimizationRunRecord).where(OptimizationRunRecord.status.in_(active))
+                ).all()
+            )
+            updated: list[OptimizationRun] = []
+            now = self._clock()
+            for record in records:
+                current = OptimizationRun.model_validate(record.payload)
+                payload = current.model_dump(mode="python")
+                payload["status"] = "failed"
+                payload["message"] = message
+                payload["updated_at"] = now
+                failed = OptimizationRun.model_validate(payload)
+                record.status = failed.status
+                record.payload = failed.model_dump(mode="json")
+                record.updated_at = failed.updated_at
+                updated.append(failed)
+            session.commit()
+            return updated
+
     @staticmethod
     def _require_optimization_run(session: Session, run_id: str) -> OptimizationRunRecord:
         record = session.get(OptimizationRunRecord, run_id)
