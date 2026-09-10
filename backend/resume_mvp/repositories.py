@@ -353,6 +353,29 @@ class ProjectRepository:
             session.commit()
             return updated
 
+    def adopt_optimization_input_version(self, run_id: str, version_id: str) -> OptimizationRun:
+        """Point a waiting run at a newer active resume version after user fact updates."""
+        with self._sessions() as session:
+            record = session.get(OptimizationRunRecord, run_id)
+            if record is None:
+                raise OptimizationRunNotFoundError(run_id)
+            current = OptimizationRun.model_validate(record.payload)
+            if current.status != "waiting_for_user":
+                raise ValueError("only waiting runs can adopt a new input version")
+            version = session.get(ResumeVersionRecord, version_id)
+            if version is None or version.project_id != record.project_id:
+                raise VersionNotFoundError(version_id)
+            payload = current.model_dump(mode="python")
+            payload["input_version_id"] = version_id
+            payload["updated_at"] = self._clock()
+            updated = OptimizationRun.model_validate(payload)
+            record.input_version_id = version_id
+            record.status = updated.status
+            record.payload = updated.model_dump(mode="json")
+            record.updated_at = updated.updated_at
+            session.commit()
+            return updated
+
     def save_optimization_step(
         self,
         run_id: str,

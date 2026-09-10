@@ -12,6 +12,7 @@ from resume_mvp.api.projects import router as projects_router
 from resume_mvp.api.providers import router as providers_router
 from resume_mvp.config import settings
 from resume_mvp.database import create_database
+from resume_mvp.optimization_orchestrator import OptimizationOrchestrator
 from resume_mvp.provider_store import PROVIDER_SETTINGS_FILE
 from resume_mvp.providers import AIProvider
 from resume_mvp.providers.e2e import E2EProvider
@@ -33,13 +34,16 @@ def create_app(
     elif providers:
         # Prefer an explicit test provider kind when injecting fakes in unit tests.
         default_test_kind = "test" if "test" in providers else next(iter(providers))
+    repository = ProjectRepository(create_database(root / "resume.db"))
+    provider_registry = ProviderRegistry(
+        providers,
+        default_test_kind=default_test_kind,
+        persist_path=None if default_test_kind else root / PROVIDER_SETTINGS_FILE,
+    )
     app.state.services = AppServices(
-        repository=ProjectRepository(create_database(root / "resume.db")),
-        providers=ProviderRegistry(
-            providers,
-            default_test_kind=default_test_kind,
-            persist_path=None if default_test_kind else root / PROVIDER_SETTINGS_FILE,
-        ),
+        repository=repository,
+        providers=provider_registry,
+        optimization=OptimizationOrchestrator(repository, provider_registry),
     )
 
     @app.get("/api/health")
