@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>一键填表</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">ACTIVE TAB ONLY</p>
+        <h1>一键填写</h1>
+        <p id="tab-meta" class="meta">读取当前活动页…</p>
+      </header>
+      <button id="fill-btn" type="button">填写当前页</button>
+      <p class="hint">只填当前活动标签页；缺项留空并提醒；不会自动投递或选岗。</p>
+      <section id="result" class="result" hidden></section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

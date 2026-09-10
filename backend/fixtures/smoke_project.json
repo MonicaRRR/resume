@@ -1,0 +1,87 @@
+{
+  "title": "冒烟·后端平台研发",
+  "company_name": "星澜科技（虚构）",
+  "application_type": "experienced",
+  "selected_template_id": "classic-cn",
+  "job_description": "岗位名称：后端开发工程师（平台方向）\n公司：星澜科技（虚构 JD，仅供冒烟测试）\n地点：上海 · 社招\n\n【岗位职责】\n1. 负责交易/订单相关核心服务的设计、开发与稳定性治理；\n2. 参与 PostgreSQL / Redis / Kafka 等中间件选型与容量规划；\n3. 建设可观测性（指标、链路、日志），推动 On-call 与故障复盘；\n4. 与产品、前端协作拆解需求，输出技术方案与评审材料；\n5. 关注研发效能，完善 CI、代码质量与接口契约。\n\n【任职要求】\n1. 计算机相关专业本科及以上，3 年左右后端开发经验；\n2. 精通至少一门后端语言（Python / Go / Java），熟悉常见 Web 框架；\n3. 扎实的数据结构、网络与数据库基础，熟悉 SQL 优化；\n4. 有高并发或高可用系统经验，了解限流、熔断、幂等与消息可靠投递；\n5. 熟悉 Docker / Kubernetes 与基础 Linux 运维；\n6. 良好的沟通协作与文档习惯，能独立推进跨团队事项。\n\n【加分项】\n- 有 OpenTelemetry / Prometheus / Grafana 落地经验；\n- 参与过 Kafka 消息平台或 Outbox 模式实践；\n- 有开源贡献或内部技术分享亦可。\n",
+  "job_analysis": {
+    "role_title": "后端开发工程师（平台方向）",
+    "seniority": "初中级 / 中级",
+    "responsibilities": [
+      "负责交易与订单相关核心服务的设计开发与稳定性治理",
+      "参与 PostgreSQL / Redis / Kafka 等中间件选型与容量规划",
+      "建设可观测性并推动 On-call 与故障复盘",
+      "与产品前端协作输出技术方案",
+      "完善 CI、代码质量与接口契约"
+    ],
+    "requirements": [
+      {
+        "id": "req-exp",
+        "text": "计算机相关专业本科及以上，约 3 年后端经验",
+        "evidence_quote": "3 年左右后端开发经验",
+        "weight": 1.5,
+        "inferred": false
+      },
+      {
+        "id": "req-lang",
+        "text": "精通 Python / Go / Java 至少一门，熟悉常见 Web 框架",
+        "evidence_quote": "精通至少一门后端语言（Python / Go / Java）",
+        "weight": 2.0,
+        "inferred": false
+      },
+      {
+        "id": "req-db",
+        "text": "扎实数据库基础，熟悉 SQL 优化",
+        "evidence_quote": "熟悉 SQL 优化",
+        "weight": 1.8,
+        "inferred": false
+      },
+      {
+        "id": "req-ha",
+        "text": "高并发或高可用经验：限流、熔断、幂等、消息可靠投递",
+        "evidence_quote": "了解限流、熔断、幂等与消息可靠投递",
+        "weight": 2.0,
+        "inferred": false
+      },
+      {
+        "id": "req-k8s",
+        "text": "熟悉 Docker / Kubernetes 与基础 Linux 运维",
+        "evidence_quote": "熟悉 Docker / Kubernetes",
+        "weight": 1.5,
+        "inferred": false
+      },
+      {
+        "id": "req-collab",
+        "text": "良好沟通协作与文档习惯，能推进跨团队事项",
+        "evidence_quote": "良好的沟通协作与文档习惯",
+        "weight": 1.0,
+        "inferred": false
+      }
+    ],
+    "bonus_skills": [
+      "OpenTelemetry / Prometheus / Grafana",
+      "Kafka 消息平台或 Outbox 实践",
+      "开源贡献或内部技术分享"
+    ],
+    "keywords": [
+      "Python",
+      "Go",
+      "PostgreSQL",
+      "Redis",
+      "Kafka",
+      "Kubernetes",
+      "可观测性",
+      "幂等",
+      "高并发"
+    ],
+    "interview_topics": [
+      "如何把订单检索 P99 从数百毫秒压到更低",
+      "消息可靠投递与幂等消费的设计取舍",
+      "一次真实故障的发现、止损与复盘"
+    ],
+    "written_topics": [
+      "设计一个带 Outbox 的订单状态变更通知方案",
+      "给定慢 SQL，说明索引与分区策略"
+    ]
+  }
+}

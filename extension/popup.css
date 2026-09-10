@@ -1,0 +1,102 @@
+:root {
+  color-scheme: light;
+  --ink: #1c2430;
+  --muted: #5c6b7a;
+  --line: #d7dee7;
+  --bg: #f7f9fb;
+  --card: #ffffff;
+  --accent: #2457d6;
+  --warn: #8a5a00;
+  --danger: #a12828;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  max-width: 360px;
+  font: 13px/1.45 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  color: var(--ink);
+  background: linear-gradient(180deg, #eef3f9 0%, var(--bg) 48%, #f4f6f8 100%);
+}
+
+main {
+  padding: 14px 14px 16px;
+}
+
+header {
+  margin-bottom: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.meta,
+.hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.hint {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.result h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.result ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.result .ok {
+  color: #1f6b3a;
+}
+
+.result .warn {
+  color: var(--warn);
+}
+
+.result .error {
+  color: var(--danger);
+}

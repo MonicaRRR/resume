@@ -105,6 +105,16 @@ export const ImportResultSchema = z.object({
   quality_score: z.number(), warnings: z.array(z.string()), version_id: z.string(),
 });
 
+/** Profile import returns parse result only (no project version). */
+export const ProfileImportResultSchema = z.object({
+  resume: ResumeSchema,
+  facts: z.array(FactSchema),
+  layout_profile: ResumeSchema.shape.layout_profile,
+  quality_score: z.number(),
+  warnings: z.array(z.string()),
+});
+export type ProfileImportResult = z.infer<typeof ProfileImportResultSchema>;
+
 export const PatchOperationSchema = z.object({
   id: z.string(), op: z.enum(["replace", "reorder"]), path: z.string(), before: z.unknown(), after: z.unknown(),
   reason: z.string(), jd_requirement_ids: z.array(z.string()), source_fact_ids: z.array(z.string()),

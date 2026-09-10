@@ -57,6 +57,35 @@ make dev
 6. 进入「建议确认」，选择快速或深度优化；完成后逐项勾选需要接受的修改。应用或手动保存都会生成新版本。
 7. 选择模板并导出，或进入面试/笔试训练。
 
+### 浏览器一键填表（实验）
+
+在招聘网站打开投递表单后，可用 Chrome/Edge 扩展把本机经历库填入**当前活动页**（缺项留空并提醒，不自动投递）。详见 [`extension/README.md`](extension/README.md)。
+
+### 冒烟测试假经历库
+
+本地可用虚构人物「林晓舟」填充经历库，并创建一个已带 JD 分析与匹配报告的求职项目「冒烟·后端平台研发」：
+
+```bash
+make seed-smoke
+```
+
+写入 `backend/.data/resume.db`：会覆盖当前经历库；同名冒烟项目会先删再建。内容全部虚构，勿当真投递。`make seed-smoke` 结束时会打印项目链接；也可只跑：
+
+```bash
+cd backend && .venv/bin/python scripts/seed_smoke_project.py
+```
+
+### 白盒沙箱（保留中间产物）
+
+不调用真实 Codex/API，用假模型跑完整优化并落盘逐步检查点：
+
+```bash
+make whitebox          # 默认社招夹具
+make whitebox-campus   # 校招夹具（含一页策略）
+```
+
+产物在 `backend/.data/whitebox/`（含 PDF、逐步 JSON、`README.md`）。
+
 ## 快速优化与深度优化
 
 | | 快速优化 | 深度优化 |
@@ -122,6 +151,8 @@ make e2e
 ```bash
 make install   # 安装 Python 与前端依赖
 make dev       # 同时启动前后端开发服务器
+make seed-smoke # 写入冒烟测试用假经历库（覆盖当前经历库）
+make whitebox-campus # 校招白盒沙箱（中间产物落盘）
 make test      # 后端与前端单元/组件测试
 make build     # 后端导入检查与前端生产构建
 make e2e       # 完整浏览器用户旅程

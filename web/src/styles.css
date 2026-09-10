@@ -1123,6 +1123,24 @@ select:focus-visible,
   background: var(--apple-bg);
 }
 
+/* 建议确认：收窄中间操作区，把宽度留给右侧「简历 + 批注」 */
+.workspace-page.patch-annotation-mode {
+  grid-template-columns: 200px minmax(280px, 380px) minmax(0, 1fr);
+}
+
+.workspace-page.patch-annotation-mode .preview-column {
+  display: block;
+  padding: 12px 14px 24px;
+}
+
+.annotation-preview-host {
+  container-type: inline-size;
+  container-name: annotation-preview;
+  min-height: calc(100vh - 72px);
+  width: 100%;
+  max-width: 100%;
+}
+
 .stage-rail {
   display: flex;
   flex-direction: column;
@@ -1633,11 +1651,169 @@ select:focus-visible,
   font-size: 12px;
 }
 
+.experience-ask-sheet {
+  margin: 0 0 16px;
+  border-radius: var(--apple-radius-xl);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: var(--apple-shadow-soft);
+  border: 0.5px solid rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+
+.experience-ask-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+
+.experience-ask-eyebrow {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--apple-secondary-label);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.experience-ask-sheet-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.experience-ask-step {
+  flex: none;
+  min-width: 42px;
+  padding: 5px 10px;
+  border-radius: var(--apple-radius-pill);
+  background: var(--apple-fill);
+  color: var(--apple-secondary-label);
+  font: 600 12px/1.2 var(--apple-font);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.experience-ask-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.experience-ask-topic {
+  width: fit-content;
+  padding: 4px 9px;
+  border-radius: var(--apple-radius-pill);
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--apple-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.experience-ask-question {
+  margin: 0;
+  color: var(--apple-label);
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.experience-ask-hints {
+  margin: 0;
+  padding: 10px 12px 10px 28px;
+  border-radius: var(--apple-radius);
+  background: var(--apple-fill-secondary);
+  color: var(--apple-secondary-label);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.experience-ask-hints li + li {
+  margin-top: 4px;
+}
+
+.experience-ask-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.experience-ask-keywords span {
+  padding: 4px 8px;
+  border-radius: var(--apple-radius-pill);
+  background: var(--apple-fill);
+  color: var(--apple-secondary-label);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.experience-ask-field {
+  display: grid;
+  gap: 6px;
+}
+
+.experience-ask-field > span {
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.experience-ask-field textarea {
+  width: 100%;
+  min-height: 96px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--apple-radius);
+  background: rgba(120, 120, 128, 0.08);
+  color: var(--apple-label);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+  transition: background var(--apple-press-duration) ease-out, box-shadow var(--apple-spring-duration) var(--apple-spring);
+}
+
+.experience-ask-field textarea:hover:not(:disabled) {
+  background: rgba(120, 120, 128, 0.12);
+}
+
+.experience-ask-field textarea:focus {
+  outline: none;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.22);
+}
+
+.experience-ask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.experience-ask-actions .primary-button,
+.experience-ask-actions .secondary-button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .experience-ask-sheet {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* legacy alias kept for any stray class usage */
 .experience-ask-panel {
   margin: 0 0 16px;
-  padding: 14px;
-  border-radius: var(--apple-radius-lg);
-  background: color-mix(in srgb, var(--apple-blue) 6%, white);
 }
 
 .experience-ask-card {
@@ -1926,6 +2102,371 @@ select:focus-visible,
   color: #9a5b00;
   font-size: 13px;
   font-weight: 650;
+}
+
+.optimization-stopped-alert p,
+.optimization-quality-details p {
+  margin: 0 0 6px;
+}
+
+.optimization-quality-details {
+  margin: 0 0 10px;
+  color: #9a5b00;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optimization-reason-list {
+  margin: 0;
+  padding-left: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.fact-gap-warning {
+  margin: 8px 0 0;
+  color: #9a5b00;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.patch-selection-strip {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 0.5px solid var(--apple-separator);
+}
+
+.patch-selection-strip p {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.patch-selection-strip small {
+  color: var(--apple-secondary-label);
+}
+
+.patch-preview-host {
+  min-height: 240px;
+}
+
+.annotated-preview-stage {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.annotation-detail {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 0.5px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-soft);
+}
+
+.annotation-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.resume-annotatable {
+  position: relative;
+}
+
+.resume-annotatable.has-suggestion {
+  cursor: pointer;
+  border-radius: 8px;
+  outline: 2px solid rgba(255, 149, 0, 0.55);
+  outline-offset: 3px;
+  background: rgba(255, 149, 0, 0.06);
+}
+
+.resume-annotatable.tone-active {
+  outline-color: rgba(0, 122, 255, 0.8);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.resume-annotatable.tone-accepted {
+  outline-color: rgba(52, 199, 89, 0.75);
+  background: rgba(52, 199, 89, 0.08);
+}
+
+.resume-annotatable.tone-gap {
+  outline-color: rgba(255, 59, 48, 0.55);
+  background: rgba(255, 59, 48, 0.05);
+}
+
+.resume-annotation-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ff9500;
+  color: #fff;
+  font: 650 11px/22px var(--apple-font);
+  text-align: center;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.resume-annotatable.tone-active .resume-annotation-badge {
+  background: #007aff;
+}
+
+.resume-annotatable.tone-accepted .resume-annotation-badge {
+  background: #34c759;
+}
+
+.resume-annotatable.tone-gap .resume-annotation-badge {
+  background: #ff3b30;
+}
+
+.resume-root-annotatable > .resume-paper {
+  margin: 0 auto;
+}
+
+.optimization-quality-inline {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 149, 0, 0.12);
+  color: #9a5b00;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.patch-review-annotations {
+  max-width: none;
+}
+
+.annotation-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  align-items: start;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.annotation-board-hint {
+  margin: 0 0 10px;
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+}
+
+.annotation-board-resume {
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: auto;
+}
+
+.annotation-board-resume .preview-panel {
+  min-width: 0;
+  margin: 0;
+}
+
+.annotation-board-resume .annotation-pdf-preview {
+  background: transparent;
+}
+
+.annotation-board-resume .annotation-pdf-preview .preview-toolbar {
+  max-width: none;
+  margin-bottom: 10px;
+}
+
+.annotation-rail {
+  position: sticky;
+  top: 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-height: calc(100vh - 88px);
+  overflow: auto;
+  padding: 4px 2px 12px;
+}
+
+/* 预览栏不够宽时：批注栏置顶，避免被挤出视口 */
+@container annotation-preview (max-width: 720px) {
+  .annotation-board {
+    grid-template-columns: 1fr;
+  }
+
+  .annotation-rail {
+    order: -1;
+    position: sticky;
+    top: 0;
+    max-height: min(42vh, 360px);
+    z-index: 2;
+    padding: 8px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    box-shadow: var(--apple-shadow-soft);
+  }
+}
+
+.annotation-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.annotation-rail-head strong {
+  font-size: 14px;
+}
+
+.annotation-rail-head span {
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+}
+
+.annotation-card {
+  border-radius: 12px;
+  border: 0.5px solid var(--apple-separator);
+  border-left: 3px solid #ff9500;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--apple-shadow-soft);
+  overflow: hidden;
+}
+
+.annotation-card.tone-active,
+.annotation-card.is-active {
+  border-left-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.18);
+}
+
+.annotation-card.tone-accepted {
+  border-left-color: #34c759;
+}
+
+.annotation-card.tone-gap {
+  border-left-color: #ff3b30;
+}
+
+.annotation-card-hit {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.annotation-card-index {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--apple-secondary-label);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.annotation-card-number {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--apple-radius-pill);
+  background: rgba(255, 149, 0, 0.16);
+  color: #9a5b00;
+  font-variant-numeric: tabular-nums;
+}
+
+.annotation-card.tone-active .annotation-card-number,
+.annotation-card.is-active .annotation-card-number {
+  background: rgba(0, 122, 255, 0.16);
+  color: var(--apple-blue);
+}
+
+.annotation-card.tone-accepted .annotation-card-number {
+  background: rgba(52, 199, 89, 0.16);
+  color: #1b7a3a;
+}
+
+.annotation-card.tone-gap .annotation-card-number {
+  background: rgba(255, 59, 48, 0.14);
+  color: #c41e16;
+}
+
+.annotation-card-location {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--apple-label);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.annotation-card-hit strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.annotation-card-hit small {
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.annotation-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+  border-top: 0.5px solid var(--apple-separator);
+  padding-top: 10px;
+}
+
+.patch-review-footer {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .workspace-page.patch-annotation-mode {
+    grid-template-columns: 76px minmax(260px, 1fr) minmax(0, 1.2fr);
+  }
+
+  .annotation-board {
+    grid-template-columns: 1fr;
+  }
+
+  .annotation-rail {
+    order: -1;
+    position: sticky;
+    top: 0;
+    max-height: min(42vh, 360px);
+  }
 }
 
 .layout-benefit {
@@ -3904,6 +4445,10 @@ select:focus-visible,
 
   .workspace-page {
     grid-template-columns: 76px minmax(400px, 1fr);
+  }
+
+  .workspace-page.patch-annotation-mode {
+    grid-template-columns: 76px minmax(280px, 1fr) minmax(0, 1.15fr);
   }
 
   .stage-rail {

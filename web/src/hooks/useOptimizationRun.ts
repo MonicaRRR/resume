@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import type { OptimizationMode, OptimizationRun, OptimizationStatus } from "../types";
@@ -11,9 +11,42 @@ const terminalStatuses = new Set<OptimizationStatus>([
   "waiting_for_user",
 ]);
 
+function storageKey(projectId: string) {
+  return `resume-mvp:optimization-run:${projectId}`;
+}
+
 export function useOptimizationRun(projectId: string) {
   const queryClient = useQueryClient();
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(() => {
+    if (!projectId || typeof sessionStorage === "undefined") return null;
+    return sessionStorage.getItem(storageKey(projectId));
+  });
+
+  useEffect(() => {
+    if (!projectId) return;
+    if (runId) sessionStorage.setItem(storageKey(projectId), runId);
+    else sessionStorage.removeItem(storageKey(projectId));
+  }, [projectId, runId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    const cached = sessionStorage.getItem(storageKey(projectId));
+    if (cached) {
+      setRunId(cached);
+      return;
+    }
+    void api.getLatestOptimizationRun(projectId).then((latest) => {
+      if (cancelled || !latest) return;
+      setRunId(latest.id);
+      queryClient.setQueryData(["optimization-run", projectId, latest.id], latest);
+    }).catch(() => {
+      /* ignore — 无历史任务 */
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, queryClient]);
 
   const query = useQuery({
     queryKey: ["optimization-run", projectId, runId],

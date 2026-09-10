@@ -45,6 +45,7 @@ export function WorkspacePage() {
   const [overflow, setOverflow] = useState(false);
   const [pendingVersionId, setPendingVersionId] = useState<string | null>(null);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [annotationHost, setAnnotationHost] = useState<HTMLDivElement | null>(null);
   const matchBootstrapped = useRef(false);
   const transferredRunId = useRef<string | null>(null);
   const optimization = useOptimizationRun(id);
@@ -78,12 +79,26 @@ export function WorkspacePage() {
 
   useEffect(() => {
     const run = optimization.run;
-    if (!run || run.status !== "ready_for_user" || !run.patch) return;
-    if (transferredRunId.current === run.id) return;
+    if (!run?.patch?.operations?.length) return;
+    // waiting_for_user 也会带上已生成的 patch，需同样进入批注审阅
+    if (run.status !== "ready_for_user" && run.status !== "waiting_for_user") return;
+    if (transferredRunId.current === run.id) {
+      // 仍同步最新 patch（返工后可能更新），但不重复打断用户
+      setPatch((prev) => {
+        const prevKey = prev?.operations.map((item) => item.id).join(",") ?? "";
+        const nextKey = run.patch!.operations.map((item) => item.id).join(",");
+        return prevKey === nextKey ? prev : run.patch!;
+      });
+      return;
+    }
     transferredRunId.current = run.id;
     setPatch(run.patch);
     setStage("optimize");
-    setMessage("优化已完成，请逐条确认修改；未同意前不会写入正式版本。");
+    setMessage(
+      run.status === "waiting_for_user"
+        ? "优化需要补充事实；已生成的建议可先按批注审阅，补充后点「继续运行」。"
+        : "优化已完成，请在简历批注中确认修改；未同意前不会写入正式版本。",
+    );
   }, [optimization.run]);
 
   const recommendation = useMemo(
@@ -299,7 +314,7 @@ export function WorkspacePage() {
   const applicationLabel = project.application_type === "campus" ? "校招 · 一页" : project.application_type === "internship" ? "实习 · 一页" : "社招 · 自然分页";
 
   return (
-    <main className="workspace-page">
+    <main className={`workspace-page${stage === "optimize" && patch ? " patch-annotation-mode" : ""}`}>
       <aside className="stage-rail">
         <Link className="back-link" to="/">← 项目列表</Link>
         <div className="project-identity"><span>{applicationLabel}</span><h1>{project.title}</h1><p>{project.company_name || "未填写公司"}</p></div>
@@ -424,6 +439,10 @@ export function WorkspacePage() {
               {patch ? (
                 <PatchReview
                   patch={patch}
+                  resume={draft}
+                  templateId={project.selected_template_id}
+                  projectId={id}
+                  applicationType={project.application_type}
                   optimization={optimization.run}
                   onChange={setPatch}
                   onDiscuss={discussOperation}
@@ -431,6 +450,7 @@ export function WorkspacePage() {
                   askBusy={busy === "ask"}
                   onApply={applySelected}
                   busy={busy === "apply"}
+                  previewHost={annotationHost}
                 />
               ) : (
                 <OptimizationLauncher
@@ -473,8 +493,20 @@ export function WorkspacePage() {
       </section>
 
       <aside className="preview-column">
-        {draft ? <ResumePreview projectId={id} resume={draft} templateId={project.selected_template_id} applicationType={project.application_type} onOverflowChange={setOverflow} /> : <div className="preview-empty"><span>A4</span><strong>简历预览将在这里出现</strong><p>先在经历库写全资料，再创建求职项目。</p></div>}
-        {activeVersion && <div className="evidence-legend"><span className="evidence-mark" /> 表示这段内容带有可追溯的事实依据</div>}
+        {stage === "optimize" && patch ? (
+          <div
+            className="annotation-preview-host"
+            ref={setAnnotationHost}
+            aria-label="简历批注预览挂载点"
+          />
+        ) : draft ? (
+          <ResumePreview projectId={id} resume={draft} templateId={project.selected_template_id} applicationType={project.application_type} onOverflowChange={setOverflow} />
+        ) : (
+          <div className="preview-empty"><span>A4</span><strong>简历预览将在这里出现</strong><p>先在经历库写全资料，再创建求职项目。</p></div>
+        )}
+        {activeVersion && !(stage === "optimize" && patch) && (
+          <div className="evidence-legend"><span className="evidence-mark" /> 表示这段内容带有可追溯的事实依据</div>
+        )}
       </aside>
 
       <AppleAlert

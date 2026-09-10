@@ -14,14 +14,17 @@ export function ResumePreview({
   templateId,
   applicationType,
   onOverflowChange,
+  variant = "default",
 }: {
   projectId: string;
   resume: ResumeDocument;
   templateId: string;
   applicationType: ApplicationType;
   onOverflowChange?: (overflow: boolean) => void;
+  variant?: "default" | "annotation";
 }) {
   const onePagePolicy = isOnePageApplication(applicationType);
+  const annotationMode = variant === "annotation";
   const [pageCount, setPageCount] = useState(1);
   const [pageImages, setPageImages] = useState<string[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -71,20 +74,25 @@ export function ResumePreview({
   };
 
   return (
-    <section className={`preview-panel pdf-preview ${onePagePolicy ? "compact-preview" : ""}`} aria-label="简历预览">
+    <section
+      className={`preview-panel pdf-preview ${onePagePolicy ? "compact-preview" : ""}${annotationMode ? " annotation-pdf-preview" : ""}`}
+      aria-label="简历预览"
+    >
       <div className="preview-toolbar">
         <div>
-          <strong>Word 真实分页预览</strong>
+          <strong>{annotationMode ? "与导出同源 · 批注审阅" : "Word 真实分页预览"}</strong>
           <span>
             {status === "loading"
               ? "正在用 Word 引擎排版…"
               : status === "error"
                 ? errorMessage
-                : onePagePolicy
-                  ? (overflow
-                    ? `实际 ${pageCount} 页 · 建议压到 1 页，也可直接导出`
-                    : "当前 1 页 · 符合校招/实习页数建议")
-                  : `${pageCount} 页 · 与导出 Word 同源排版`}
+                : annotationMode
+                  ? `${pageCount} 页 · 与导出 Word/PDF 同一排版`
+                  : onePagePolicy
+                    ? (overflow
+                      ? `实际 ${pageCount} 页 · 建议压到 1 页，也可直接导出`
+                      : "当前 1 页 · 符合校招/实习页数建议")
+                    : `${pageCount} 页 · 与导出 Word 同源排版`}
           </span>
         </div>
         <button type="button" disabled={status !== "ready" || downloading} onClick={() => void savePdf()}>

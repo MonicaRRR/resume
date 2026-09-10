@@ -3,7 +3,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
-from resume_mvp.domain import CustomSection, ProjectEntry, ResumeDocument, SkillGroup, SourcedText
+from resume_mvp.domain import Basics, CustomSection, ProjectEntry, ResumeDocument, SkillGroup, SourcedText
 from resume_mvp.exports import build_docx
 from resume_mvp.layout_analysis import analyze_pdf_layout
 from resume_mvp.preview import convert_docx_to_pdf
@@ -149,8 +149,11 @@ def test_campus_two_page_pdf_is_severe_overflow() -> None:
 
 @pytest.mark.integration
 def test_detects_project_bullet_tail_from_real_exported_pdf() -> None:
+    # Last clause is intentionally short so the wrapped final PDF line stays under 25% width.
+    bullet = ("完成订单检索接口优化与监控看板建设，推动限流熔断与故障复盘落地。" * 3) + "短。"
     resume = ResumeDocument(
-        projects=[ProjectEntry(name="项目名称", bullets=[SourcedText(value="测" * 100)])]
+        basics=Basics(name="张宁"),
+        projects=[ProjectEntry(name="可靠消息投递平台", bullets=[SourcedText(value=bullet)])],
     )
     pdf = convert_docx_to_pdf(build_docx(resume, "clear-single", "experienced"))
 

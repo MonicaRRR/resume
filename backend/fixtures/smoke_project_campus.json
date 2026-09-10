@@ -1,0 +1,85 @@
+{
+  "title": "冒烟·校招后端",
+  "company_name": "星澜科技（虚构）",
+  "application_type": "campus",
+  "selected_template_id": "classic-cn",
+  "job_description": "岗位名称：2026 届校招 · 后端开发工程师\n公司：星澜科技（虚构 JD，仅供校招冒烟）\n地点：杭州 / 上海 · 校招\n\n【岗位方向】\n参与业务后端服务开发与日常稳定性维护，在导师带领下完成需求拆解、接口实现、测试与上线支持。\n\n【岗位职责】\n1. 使用 Python / Go / Java 等语言开发与维护后端接口；\n2. 参与 MySQL / Redis 等存储相关的设计与简单优化；\n3. 编写单元/集成测试，关注日志与基础监控；\n4. 与产品、前端协作，按时交付迭代需求；\n5. 参与 Code Review 与故障复盘，沉淀文档。\n\n【任职要求】\n1. 2025/2026 届计算机相关专业本科或硕士；\n2. 扎实的数据结构、操作系统与计算机网络基础；\n3. 至少熟悉一门后端语言与常见 Web 框架（如 FastAPI / Spring / Gin）；\n4. 熟悉 SQL，了解 Redis / 消息队列尤佳；\n5. 有实习、课程设计或开源项目经验，能讲清楚自己的贡献；\n6. 良好的学习意愿与沟通协作习惯。\n\n【加分项】\n- 有高并发或性能优化实习经历；\n- 竞赛、奖学金或技术博客；\n- 了解 Docker / Linux 基础运维。\n",
+  "job_analysis": {
+    "role_title": "后端开发工程师（校招）",
+    "seniority": "应届 / 校招",
+    "responsibilities": [
+      "开发与维护后端接口",
+      "参与 MySQL / Redis 相关设计与简单优化",
+      "编写测试并关注日志与监控",
+      "与产品前端协作交付需求",
+      "参与 Code Review 与故障复盘"
+    ],
+    "requirements": [
+      {
+        "id": "req-grad",
+        "text": "2025/2026 届计算机相关专业本科或硕士",
+        "evidence_quote": "2025/2026 届计算机相关专业本科或硕士",
+        "weight": 1.5,
+        "inferred": false
+      },
+      {
+        "id": "req-cs-fund",
+        "text": "扎实的数据结构、操作系统与计算机网络基础",
+        "evidence_quote": "扎实的数据结构、操作系统与计算机网络基础",
+        "weight": 1.5,
+        "inferred": false
+      },
+      {
+        "id": "req-lang",
+        "text": "熟悉一门后端语言与常见 Web 框架（如 FastAPI）",
+        "evidence_quote": "至少熟悉一门后端语言与常见 Web 框架",
+        "weight": 2.0,
+        "inferred": false
+      },
+      {
+        "id": "req-sql",
+        "text": "熟悉 SQL，了解 Redis / 消息队列尤佳",
+        "evidence_quote": "熟悉 SQL，了解 Redis",
+        "weight": 1.8,
+        "inferred": false
+      },
+      {
+        "id": "req-project",
+        "text": "有实习、课程设计或开源项目经验并能讲清贡献",
+        "evidence_quote": "有实习、课程设计或开源项目经验",
+        "weight": 2.0,
+        "inferred": false
+      },
+      {
+        "id": "req-collab",
+        "text": "良好的学习意愿与沟通协作习惯",
+        "evidence_quote": "良好的学习意愿与沟通协作习惯",
+        "weight": 1.0,
+        "inferred": false
+      }
+    ],
+    "bonus_skills": [
+      "高并发或性能优化实习",
+      "竞赛 / 奖学金 / 技术博客",
+      "Docker / Linux 基础"
+    ],
+    "keywords": [
+      "Python",
+      "FastAPI",
+      "MySQL",
+      "Redis",
+      "校招",
+      "实习",
+      "接口"
+    ],
+    "interview_topics": [
+      "一段实习里你独立负责的接口与指标",
+      "如何排查一次超时或慢查询",
+      "课程项目里你与同学的分工"
+    ],
+    "written_topics": [
+      "设计一个带缓存的活动查询接口",
+      "解释数据库索引的选择思路"
+    ]
+  }
+}

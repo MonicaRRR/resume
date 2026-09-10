@@ -17,6 +17,7 @@ from resume_mvp.domain import (
     QuestionList,
     ResumePatch,
 )
+from resume_mvp.autofill import AgentAutofillResponse
 from resume_mvp.optimization_models import OptimizationReview
 
 
@@ -191,6 +192,26 @@ class E2EProvider:
                     next_question=None,
                 )
             )
+        if schema is AgentAutofillResponse:
+            remaining = []
+            marker = "remaining_fields:"
+            if marker in prompt:
+                try:
+                    remaining = json.loads(prompt.split(marker, 1)[1].strip().splitlines()[0])
+                except json.JSONDecodeError:
+                    remaining = []
+            mappings = []
+            empty_field_ids = []
+            for field in remaining:
+                field_id = str(field.get("id") or "")
+                label = str(field.get("label") or field.get("nearby_text") or "").lower()
+                if not field_id:
+                    continue
+                if "称呼" in label or "联系人" in label:
+                    mappings.append({"field_id": field_id, "profile_key": "name"})
+                else:
+                    empty_field_ids.append(field_id)
+            return schema.model_validate({"mappings": mappings, "empty_field_ids": empty_field_ids})
         return schema.model_validate({"status": "ok"})
 
 

@@ -329,8 +329,23 @@ def summarize_codex_failure(stderr: str, stdout: str = "") -> str:
         return "Codex 未能完成本次任务"
 
     lowered = combined.lower()
+    # Local auth.json can still exist while ChatGPT OAuth tokens are revoked.
+    if any(
+        marker in lowered
+        for marker in (
+            "token_revoked",
+            "refresh_token_invalidated",
+            "invalidated oauth token",
+            "session has ended",
+            "your session has ended",
+        )
+    ):
+        return (
+            "Codex 本地显示已登录，但 ChatGPT 会话令牌已失效。"
+            "请在本机重新执行 `codex login`（必要时先 `codex logout`）后再试。"
+        )
     if "login" in lowered or "authentication" in lowered or "unauthorized" in lowered:
-        return "Codex 尚未登录，请在本机执行 `codex login`"
+        return "Codex 尚未登录或会话已失效，请在本机执行 `codex login`"
     if "unexpected argument" in lowered or "unrecognized" in lowered:
         first_line = next((line.strip() for line in combined.splitlines() if line.strip()), "")
         return f"Codex CLI 参数不兼容：{first_line}"

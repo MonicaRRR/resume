@@ -177,6 +177,27 @@ async def test_thin_projects_attach_experience_asks() -> None:
     assert "项目" in result.experience_asks[0].question
     assert result.experience_asks[0].guidance
     assert "experience_asks" in provider.prompts[0]
+    assert "课程设计" in provider.prompts[0] or "课程" in provider.prompts[0]
+
+
+@pytest.mark.anyio
+async def test_experienced_thin_projects_avoid_campus_asks() -> None:
+    provider = FakeProvider([ResumePatch(operations=[])])
+    result = await suggest_resume_patch(
+        provider,
+        valid_analysis(),
+        ResumeDocument.blank(),
+        facts=[],
+        application_type="experienced",
+    )
+    ask = result.experience_asks[0]
+    assert "工作项目" in ask.question or "专项" in ask.question
+    assert "课程" not in ask.question
+    assert "比赛" not in ask.question
+    assert "课程大作业" not in ask.guidance
+    assert "黑客松" not in ask.guidance
+    assert "数学建模" not in ask.guidance
+    assert "社招禁止" in provider.prompts[0]
 
 
 @pytest.mark.anyio

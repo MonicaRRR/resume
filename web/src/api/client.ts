@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   FollowupQuestionSchema,
   ImportResultSchema,
+  ProfileImportResultSchema,
   JobAnalysisSchema,
   MatchReportSchema,
   OptimizationRunSchema,
@@ -78,6 +79,10 @@ export const api = {
     OptimizationRunSchema,
     json("POST", { mode, provider }),
   ),
+  getLatestOptimizationRun: (projectId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/latest`,
+    OptimizationRunSchema.nullable(),
+  ),
   getOptimizationRun: (projectId: string, runId: string) => request(
     `/api/projects/${projectId}/optimization-runs/${runId}`,
     OptimizationRunSchema,
@@ -125,6 +130,11 @@ export const api = {
     facts: z.array(FactSchema),
     ready: z.boolean(),
   }), json("PUT", { resume })),
+  importProfileResume: async (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request("/api/profile/import", ProfileImportResultSchema, { method: "POST", body });
+  },
   createPractice: (projectId: string, kind: "interview" | "written", provider: string) => request(`/api/projects/${projectId}/practice/sessions`, PracticeSessionSchema, json("POST", { kind, provider })),
   getPractice: (sessionId: string) => request(`/api/practice/sessions/${sessionId}`, PracticeSessionSchema),
   answerPractice: (sessionId: string, answer: string, provider: string) => request(`/api/practice/sessions/${sessionId}/answer`, PracticeSessionSchema, json("POST", { answer, provider })),

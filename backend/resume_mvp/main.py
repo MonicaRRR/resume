@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from resume_mvp.api.autofill import router as autofill_router
 from resume_mvp.api.dependencies import AppServices, ProviderRegistry
 from resume_mvp.api.exports import router as exports_router
 from resume_mvp.api.optimization import router as optimization_router
@@ -26,6 +28,19 @@ def create_app(
     test_providers: Mapping[str, AIProvider] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="中文 AI 简历工作台", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:8000",
+            "http://localhost:8000",
+        ],
+        allow_origin_regex=r"^chrome-extension://.*$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     root = data_dir or settings.data_dir
     default_test_kind = ""
     providers = test_providers
@@ -56,6 +71,7 @@ def create_app(
     app.include_router(projects_router)
     app.include_router(optimization_router)
     app.include_router(profile_router)
+    app.include_router(autofill_router)
     app.include_router(providers_router)
     app.include_router(exports_router)
     app.include_router(practice_router)

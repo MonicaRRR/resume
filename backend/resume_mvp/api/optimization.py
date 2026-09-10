@@ -53,6 +53,24 @@ async def create_optimization_run(
 
 
 @router.get(
+    "/{project_id}/optimization-runs/latest",
+    response_model=OptimizationRun | None,
+)
+def get_latest_optimization_run(
+    project_id: str,
+    services: AppServices = Depends(get_services),
+) -> OptimizationRun | None:
+    try:
+        services.repository.get(project_id)
+    except ProjectNotFoundError as error:
+        raise HTTPException(
+            404,
+            detail={"code": "PROJECT_NOT_FOUND", "message": "项目不存在"},
+        ) from error
+    return services.repository.latest_optimization_run(project_id)
+
+
+@router.get(
     "/{project_id}/optimization-runs/{run_id}",
     response_model=OptimizationRun,
 )

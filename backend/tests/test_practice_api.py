@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from resume_mvp.domain import (
     JobAnalysis,
     JobRequirement,
+    MatchReport,
     PracticeEvaluation,
     PracticeFeedback,
     PracticeQuestion,
@@ -21,6 +22,8 @@ class ApiPracticeProvider:
                     JobRequirement(text="Python API", evidence_quote="负责 Python API")
                 ],
             )
+        if schema is MatchReport:
+            return MatchReport(coverage=1.0, items=[])
         if schema is PracticeQuestion:
             return PracticeQuestion(category="专业题", prompt="如何保证 API 稳定性？", hint="考虑可观测性")
         if schema is PracticeEvaluation:
@@ -37,6 +40,34 @@ def test_practice_session_is_saved_across_answer_roundtrip(tmp_path: Path) -> No
     """Catches training state disappearing between local HTTP requests."""
     client = TestClient(
         create_app(data_dir=tmp_path, test_providers={"test": ApiPracticeProvider()})
+    )
+    client.put(
+        "/api/profile",
+        json={
+            "resume": {
+                "basics": {
+                    "name": "张宁",
+                    "email": "",
+                    "phone": "",
+                    "location": "",
+                    "target_role": {"value": "后端工程师", "source_fact_ids": [], "origin": "manual", "confidence": 1},
+                    "summary": {"value": "", "source_fact_ids": [], "origin": "manual", "confidence": 1},
+                },
+                "education": [],
+                "work_experience": [{
+                    "id": "w1", "company": "示例科技", "title": "实习生", "start_date": "", "end_date": "",
+                    "bullets": [{"value": "使用 Python 开发 API", "source_fact_ids": [], "origin": "manual", "confidence": 1}],
+                }],
+                "projects": [],
+                "skills": [{"id": "s1", "name": "技能", "items": [{"value": "Python", "source_fact_ids": [], "origin": "manual", "confidence": 1}]}],
+                "certificates": [], "awards": [], "custom_sections": [],
+                "section_order": ["basics", "work_experience", "projects", "education", "skills"],
+                "layout_profile": {
+                    "source_kind": "builtin", "font_family": "", "heading_font_family": "",
+                    "accent_color": "", "base_font_size": None, "line_height": None, "columns": 1, "imported": False,
+                },
+            }
+        },
     )
     project = client.post(
         "/api/projects",

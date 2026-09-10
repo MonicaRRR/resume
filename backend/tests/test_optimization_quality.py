@@ -80,7 +80,23 @@ def test_rejects_untraceable_operation() -> None:
     assert result.passed is False
     assert result.traceability == 0
     assert result.factuality_passed is False
-    assert "事实依据" in result.reasons[0]
+    assert any("无事实依据" in reason and "/basics/summary" in reason for reason in result.reasons)
+
+
+def test_rejects_review_factuality_with_rejection_reasons() -> None:
+    result = evaluate_quality(
+        _grounded_patch(),
+        [_fact()],
+        _match_report(),
+        LayoutReport(),
+        _review(factuality_passed=False).model_copy(
+            update={"rejection_reasons": ["摘要里出现了简历未提供的「十倍性能」"]}
+        ),
+        "experienced",
+    )
+    assert result.passed is False
+    assert result.factuality_passed is False
+    assert any("十倍性能" in reason for reason in result.reasons)
 
 
 def test_campus_rejects_two_pages() -> None:
@@ -90,7 +106,7 @@ def test_campus_rejects_two_pages() -> None:
 
     assert result.page_policy_passed is False
     assert result.passed is False
-    assert "校招/实习简历超过一页" in result.reasons
+    assert any("校招/实习简历超过一页" in reason for reason in result.reasons)
 
 
 def test_internship_rejects_two_pages() -> None:
@@ -123,9 +139,9 @@ def test_rejects_quality_thresholds_and_reports_all_reasons() -> None:
     assert result.passed is False
     assert result.severe_layout_issues == 1
     assert result.reasons == [
-        "高权重 JD 覆盖率不足 80%",
-        "仍存在严重排版问题",
-        "综合表达评分不足 80 分",
+        "高权重 JD 覆盖率不足 80%（当前 79%）",
+        "严重排版：孤行标题（第 1 页）",
+        "综合表达评分不足 80 分（当前 79 分）",
     ]
 
 

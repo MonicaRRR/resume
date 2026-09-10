@@ -334,6 +334,19 @@ class ProjectRepository:
                 raise OptimizationRunNotFoundError(run_id)
             return self._optimization_run(record)
 
+    def latest_optimization_run(self, project_id: str) -> OptimizationRun | None:
+        """Return the most recently updated optimization run for a project, if any."""
+        with self._sessions() as session:
+            record = session.scalar(
+                select(OptimizationRunRecord)
+                .where(OptimizationRunRecord.project_id == project_id)
+                .order_by(OptimizationRunRecord.updated_at.desc())
+                .limit(1)
+            )
+            if record is None:
+                return None
+            return self._optimization_run(record)
+
     def update_optimization_run(self, run_id: str, **changes: Any) -> OptimizationRun:
         """Update the JSON payload and indexed status in one transaction."""
         with self._sessions() as session:

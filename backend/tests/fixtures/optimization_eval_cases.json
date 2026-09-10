@@ -320,7 +320,7 @@
       "page_policy_passed": false,
       "severe_layout_issues": 0,
       "reasons": [
-        "校招/实习简历超过一页"
+        "校招/实习简历超过一页（当前 2 页）"
       ]
     }
   },
@@ -478,7 +478,7 @@
       "page_policy_passed": true,
       "severe_layout_issues": 0,
       "reasons": [
-        "存在无事实依据的修改"
+        "无事实依据：建议 /basics/summary（夸大） 未绑定任何事实"
       ]
     }
   }

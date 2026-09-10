@@ -93,6 +93,77 @@ function Section({ title, children, className = "" }: { title: string; children:
 }
 
 
+type AnnotationTone = "pending" | "accepted" | "active" | "gap";
+
+export type ResumeAnnotationMarks = Record<string, {
+  count: number;
+  tone: AnnotationTone;
+  /** 1-based 批注序号，与右侧批注栏一致 */
+  numbers: number[];
+}>;
+
+
+function badgeLabel(numbers: number[]): string {
+  if (numbers.length <= 1) return String(numbers[0] ?? 1);
+  if (numbers.length === 2) return `${numbers[0]}·${numbers[1]}`;
+  return `${numbers[0]}+`;
+}
+
+
+function Annotatable({
+  target,
+  marks,
+  activeTarget,
+  onSelect,
+  children,
+  className = "",
+}: {
+  target: string;
+  marks?: ResumeAnnotationMarks;
+  activeTarget?: string | null;
+  onSelect?: (target: string) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const mark = marks?.[target];
+  if (!mark && !onSelect) {
+    return <div className={className || undefined}>{children}</div>;
+  }
+  const tone = activeTarget === target ? "active" : mark?.tone;
+  const classes = [
+    "resume-annotatable",
+    className,
+    mark ? "has-suggestion" : "",
+    tone ? `tone-${tone}` : "",
+  ].filter(Boolean).join(" ");
+  const numbers = mark?.numbers ?? [];
+  return (
+    <div
+      className={classes}
+      data-annotation-target={target}
+      role={mark ? "button" : undefined}
+      tabIndex={mark ? 0 : undefined}
+      aria-pressed={activeTarget === target || undefined}
+      aria-label={mark ? `批注 ${numbers.join("、")}，共 ${mark.count} 条` : undefined}
+      onClick={mark && onSelect ? (event) => {
+        event.stopPropagation();
+        onSelect(target);
+      } : undefined}
+      onKeyDown={mark && onSelect ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(target);
+        }
+      } : undefined}
+    >
+      {children}
+      {mark ? <span className="resume-annotation-badge">{badgeLabel(numbers)}</span> : null}
+    </div>
+  );
+}
+
+
 function ContactLine({ resume }: { resume: ResumeDocument }) {
   const identity = [
     resume.basics.gender ? `性别：${resume.basics.gender}` : "",
@@ -110,7 +181,19 @@ function ContactLine({ resume }: { resume: ResumeDocument }) {
 }
 
 
-export function TemplateResume({ resume, templateId }: { resume: ResumeDocument; templateId: string }) {
+export function TemplateResume({
+  resume,
+  templateId,
+  annotationMarks,
+  activeAnnotationTarget = null,
+  onSelectAnnotation,
+}: {
+  resume: ResumeDocument;
+  templateId: string;
+  annotationMarks?: ResumeAnnotationMarks;
+  activeAnnotationTarget?: string | null;
+  onSelectAnnotation?: (target: string) => void;
+}) {
   const preserveImported = resume.layout_profile.imported && (templateId === "clear-single" || templateId === "classic-cn");
   const effectiveTemplateId = preserveImported && resume.layout_profile.columns === 2 ? "pro-double" : templateId;
   const ordered = effectiveTemplateId === "project-focus"
@@ -128,70 +211,110 @@ export function TemplateResume({ resume, templateId }: { resume: ResumeDocument;
     if (profile.line_height && profile.line_height >= 1.1 && profile.line_height <= 1.8) importedStyle.lineHeight = String(profile.line_height);
   }
 
+  const bind = {
+    marks: annotationMarks,
+    activeTarget: activeAnnotationTarget,
+    onSelect: onSelectAnnotation,
+  };
+
   const sections: Record<string, ReactNode> = {
     summary: resume.basics.summary.value ? (
-      <Section title="个人概述"><p><EvidenceText text={resume.basics.summary} /></p></Section>
+      <Annotatable target="basics.summary" {...bind}>
+        <Section title="个人概述"><p><EvidenceText text={resume.basics.summary} /></p></Section>
+      </Annotatable>
     ) : null,
     education: resume.education.length ? (
       <Section title="教育经历">
-        {resume.education.map((item) => <article className="resume-entry" key={item.id}>
-          <div className="entry-heading"><strong>{item.institution}</strong><span>{item.start_date} — {item.end_date}</span></div>
-          <p>{[item.degree, item.field].filter(Boolean).join(" · ")}</p>
-          {item.highlights.length > 0 && <ul>{item.highlights.map((line, index) => <li key={index}><EvidenceText text={line} /></li>)}</ul>}
-        </article>)}
+        {resume.education.map((item, index) => (
+          <Annotatable key={item.id} target={`education.${index}`} className="resume-entry-wrap" {...bind}>
+            <article className="resume-entry">
+              <div className="entry-heading"><strong>{item.institution}</strong><span>{item.start_date} — {item.end_date}</span></div>
+              <p>{[item.degree, item.field].filter(Boolean).join(" · ")}</p>
+              {item.highlights.length > 0 && <ul>{item.highlights.map((line, lineIndex) => <li key={lineIndex}><EvidenceText text={line} /></li>)}</ul>}
+            </article>
+          </Annotatable>
+        ))}
       </Section>
     ) : null,
     work: resume.work_experience.length ? (
       <Section title="实习工作经历">
-        {resume.work_experience.map((item) => <article className="resume-entry" key={item.id}>
-          <div className="entry-heading"><strong>{item.company}</strong><span>{item.start_date} — {item.end_date}</span></div>
-          <p className="entry-role">{item.title}</p>
-          <ul>{item.bullets.map((line, index) => <li key={index}><EvidenceText text={line} /></li>)}</ul>
-        </article>)}
+        {resume.work_experience.map((item, index) => (
+          <Annotatable key={item.id} target={`work_experience.${index}`} className="resume-entry-wrap" {...bind}>
+            <article className="resume-entry">
+              <div className="entry-heading"><strong>{item.company}</strong><span>{item.start_date} — {item.end_date}</span></div>
+              <p className="entry-role">{item.title}</p>
+              <ul>{item.bullets.map((line, lineIndex) => <li key={lineIndex}><EvidenceText text={line} /></li>)}</ul>
+            </article>
+          </Annotatable>
+        ))}
       </Section>
     ) : null,
     projects: resume.projects.length ? (
       <Section title="项目经历" className="project-section">
-        {resume.projects.map((item) => <article className="resume-entry" key={item.id}>
-          <div className="entry-heading"><strong>{item.name}</strong><span>{item.start_date} — {item.end_date}</span></div>
-          <p className="entry-role">{item.role}</p>
-          <ul>{item.bullets.map((line, index) => <li key={index}><EvidenceText text={line} /></li>)}</ul>
-        </article>)}
+        {resume.projects.map((item, index) => (
+          <Annotatable key={item.id} target={`projects.${index}`} className="resume-entry-wrap" {...bind}>
+            <article className="resume-entry">
+              <div className="entry-heading"><strong>{item.name}</strong><span>{item.start_date} — {item.end_date}</span></div>
+              <p className="entry-role">{item.role}</p>
+              <ul>{item.bullets.map((line, lineIndex) => <li key={lineIndex}><EvidenceText text={line} /></li>)}</ul>
+            </article>
+          </Annotatable>
+        ))}
       </Section>
     ) : null,
     skills: (() => {
       const lines = skillLinesForDisplay(resume.skills);
       if (!lines.length) return null;
       return (
-        <Section title="专业技能" className="skill-section">
-          <ul>
-            {lines.map((line, index) => (
-              <li key={index}>{line}</li>
-            ))}
-          </ul>
-        </Section>
+        <Annotatable target="skills" {...bind}>
+          <Section title="专业技能" className="skill-section">
+            <ul>
+              {lines.map((line, index) => (
+                <li key={index}>{line}</li>
+              ))}
+            </ul>
+          </Section>
+        </Annotatable>
       );
     })(),
   };
 
   return (
-    <article className={`resume-paper resume-sheet template-${effectiveTemplateId}`} style={importedStyle}>
-      <header className={`resume-header${resume.basics.photo_data_url ? " resume-header-with-photo" : ""}`}>
-        <div>
-          <h1>{resume.basics.name || "你的姓名"}</h1>
-          <p className="target-role">{resume.basics.target_role.value || "目标岗位"}</p>
-          <ContactLine resume={resume} />
+    <Annotatable target="resume" {...bind} className="resume-root-annotatable">
+      <article className={`resume-paper resume-sheet template-${effectiveTemplateId}`} style={importedStyle}>
+        <Annotatable target="basics.header" {...bind}>
+          <header className={`resume-header${resume.basics.photo_data_url ? " resume-header-with-photo" : ""}`}>
+            <div>
+              <h1>{resume.basics.name || "你的姓名"}</h1>
+              <Annotatable target="basics.target_role" {...bind}>
+                <p className="target-role">{resume.basics.target_role.value || "目标岗位"}</p>
+              </Annotatable>
+              <ContactLine resume={resume} />
+            </div>
+            {resume.basics.photo_data_url ? (
+              <img className="resume-photo" src={resume.basics.photo_data_url} alt="证件照" />
+            ) : null}
+          </header>
+        </Annotatable>
+        <div className="resume-sections">
+          {ordered.map((key) => <div className={`resume-slot slot-${key}`} key={key}>{sections[key]}</div>)}
+          {resume.certificates.length > 0 && (
+            <Annotatable target="certificates" {...bind}>
+              <Section title="证书">{resume.certificates.map((item) => <p key={item.id}><strong>{item.name}</strong> <EvidenceText text={item.detail} /></p>)}</Section>
+            </Annotatable>
+          )}
+          {resume.awards.length > 0 && (
+            <Annotatable target="awards" {...bind}>
+              <Section title="荣誉奖项">{resume.awards.map((item) => <p key={item.id}><strong>{item.name}</strong> <EvidenceText text={item.detail} /></p>)}</Section>
+            </Annotatable>
+          )}
+          {resume.custom_sections.map((section, index) => (
+            <Annotatable key={section.id} target={`custom_sections.${index}`} {...bind}>
+              <Section title={section.title}><ul>{section.items.map((item, itemIndex) => <li key={itemIndex}><EvidenceText text={item} /></li>)}</ul></Section>
+            </Annotatable>
+          ))}
         </div>
-        {resume.basics.photo_data_url ? (
-          <img className="resume-photo" src={resume.basics.photo_data_url} alt="证件照" />
-        ) : null}
-      </header>
-      <div className="resume-sections">
-        {ordered.map((key) => <div className={`resume-slot slot-${key}`} key={key}>{sections[key]}</div>)}
-        {resume.certificates.length > 0 && <Section title="证书">{resume.certificates.map((item) => <p key={item.id}><strong>{item.name}</strong> <EvidenceText text={item.detail} /></p>)}</Section>}
-        {resume.awards.length > 0 && <Section title="荣誉奖项">{resume.awards.map((item) => <p key={item.id}><strong>{item.name}</strong> <EvidenceText text={item.detail} /></p>)}</Section>}
-        {resume.custom_sections.map((section) => <Section title={section.title} key={section.id}><ul>{section.items.map((item, index) => <li key={index}><EvidenceText text={item} /></li>)}</ul></Section>)}
-      </div>
-    </article>
+      </article>
+    </Annotatable>
   );
 }

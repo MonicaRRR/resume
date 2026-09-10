@@ -71,7 +71,9 @@ def build_docx(
     _write_header(document, resume, style, classic=classic)
     _write_basic_info_block(document, resume, style, compact=compact, classic=classic)
 
-    if resume.basics.summary.value:
+    # Campus/internship paper resumes usually skip a free-text summary block.
+    show_summary = application_type == "experienced" and bool(resume.basics.summary.value.strip())
+    if show_summary:
         _heading(document, "个人简介", style, compact=compact, classic=classic)
         document.add_paragraph(resume.basics.summary.value)
 
@@ -99,7 +101,7 @@ def build_docx(
                     style,
                     classic=classic,
                 )
-                _bullets(document, [bullet.value for bullet in item.bullets])
+                _bullets(document, [bullet.value for bullet in item.bullets], classic=classic)
         elif section_name == "projects" and resume.projects:
             _heading(document, "项目经历", style, compact=compact, classic=classic)
             for item in resume.projects:
@@ -112,7 +114,7 @@ def build_docx(
                     style,
                     classic=classic,
                 )
-                _bullets(document, [bullet.value for bullet in item.bullets])
+                _bullets(document, [bullet.value for bullet in item.bullets], classic=classic)
         elif section_name == "education" and resume.education:
             _heading(
                 document,
@@ -122,35 +124,44 @@ def build_docx(
                 classic=classic,
             )
             for item in resume.education:
-                detail = "，".join(value for value in [item.field, item.degree] if value) if classic else " · ".join(
-                    value for value in [item.degree, item.field] if value
-                )
-                _entry_title(
-                    document,
-                    item.institution,
-                    detail,
-                    item.start_date,
-                    item.end_date,
-                    style,
-                    classic=classic,
-                )
-                _bullets(document, [highlight.value for highlight in item.highlights])
+                if classic:
+                    _classic_education_entry(
+                        document,
+                        item.institution,
+                        item.field,
+                        item.degree,
+                        item.start_date,
+                        item.end_date,
+                        style,
+                    )
+                else:
+                    detail = " · ".join(value for value in [item.degree, item.field] if value)
+                    _entry_title(
+                        document,
+                        item.institution,
+                        detail,
+                        item.start_date,
+                        item.end_date,
+                        style,
+                        classic=False,
+                    )
+                _bullets(document, [highlight.value for highlight in item.highlights], classic=classic)
         elif section_name == "skills" and resume.skills:
             lines = skill_lines_for_export(resume.skills)
             if lines:
                 _heading(document, "专业技能", style, compact=compact, classic=classic)
-                _bullets(document, lines)
+                _bullets(document, lines, classic=classic)
         elif section_name == "custom_sections":
             for custom in resume.custom_sections:
                 _heading(document, custom.title, style, compact=compact, classic=classic)
-                _bullets(document, [item.value for item in custom.items])
+                _bullets(document, [item.value for item in custom.items], classic=classic)
 
     if resume.certificates:
         _heading(document, "证书", style, compact=compact, classic=classic)
-        _bullets(document, [entry.name for entry in resume.certificates])
+        _bullets(document, [entry.name for entry in resume.certificates], classic=classic)
     if resume.awards:
         _heading(document, "奖项", style, compact=compact, classic=classic)
-        _bullets(document, [entry.name for entry in resume.awards])
+        _bullets(document, [entry.name for entry in resume.awards], classic=classic)
 
     output = BytesIO()
     document.save(output)
@@ -217,14 +228,18 @@ def _write_header(
     *,
     classic: bool = False,
 ) -> None:
+    if classic:
+        _write_classic_header(document, resume, style)
+        return
+
     photo = _decode_photo(resume.basics.photo_data_url)
     if photo is None:
         title = document.add_paragraph()
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        title.paragraph_format.space_after = Pt(2 if classic else 4)
+        title.paragraph_format.space_after = Pt(4)
         name_run = title.add_run(resume.basics.name or "姓名")
-        _style_run(name_run, style["font"], 22 if classic else 20, style["accent"], bold=True)
-        if resume.basics.target_role.value and not classic:
+        _style_run(name_run, style["font"], 20, style["accent"], bold=True)
+        if resume.basics.target_role.value:
             role = document.add_paragraph()
             role.alignment = WD_ALIGN_PARAGRAPH.CENTER
             _style_run(role.add_run(resume.basics.target_role.value), style["font"], 10, "687386")
@@ -236,10 +251,10 @@ def _write_header(
     name = left.paragraphs[0]
     name.alignment = WD_ALIGN_PARAGRAPH.LEFT
     _style_run(name.add_run(resume.basics.name or "姓名"), style["font"], 20, style["accent"], bold=True)
-    if resume.basics.target_role.value and not classic:
+    if resume.basics.target_role.value:
         role = left.add_paragraph()
         _style_run(role.add_run(resume.basics.target_role.value), style["font"], 10, "687386")
-    for line in _basic_info_lines(resume.basics, classic=classic):
+    for line in _basic_info_lines(resume.basics, classic=False):
         info = left.add_paragraph()
         run = info.add_run(line)
         _style_run(run, style["font"], 9, "4B5563")
@@ -247,6 +262,37 @@ def _write_header(
     photo_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     run = photo_paragraph.add_run()
     run.add_picture(BytesIO(photo), width=Cm(2.6), height=Cm(3.4))
+
+
+def _write_classic_header(document: Document, resume: ResumeDocument, style: dict) -> None:
+    """Match the Overleaf classic Chinese single-column macros: name / contact / otherInfo / photo."""
+    title = document.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.paragraph_format.space_after = Pt(2)
+    _style_run(
+        title.add_run(resume.basics.name or "姓名"),
+        style["font"],
+        22,
+        style["accent"],
+        bold=True,
+    )
+
+    for line in _classic_info_lines(resume.basics):
+        paragraph = document.add_paragraph()
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.paragraph_format.space_after = Pt(1)
+        _style_run(paragraph.add_run(line), style["font"], 9.5, "333333")
+
+    photo = _decode_photo(resume.basics.photo_data_url)
+    if photo is None:
+        return
+    photo_paragraph = document.add_paragraph()
+    photo_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    photo_paragraph.paragraph_format.space_before = Pt(0)
+    photo_paragraph.paragraph_format.space_after = Pt(2)
+    run = photo_paragraph.add_run()
+    page_width = document.sections[0].page_width
+    run.add_picture(BytesIO(photo), width=int(page_width * 0.15))
 
 
 def _write_basic_info_block(
@@ -257,10 +303,13 @@ def _write_basic_info_block(
     compact: bool,
     classic: bool = False,
 ) -> None:
+    if classic:
+        # Classic contact/otherInfo already written under the centered name.
+        return
     # When a photo header already embeds basics beside the portrait, skip the duplicate block.
     if _decode_photo(resume.basics.photo_data_url) is not None:
         return
-    lines = _basic_info_lines(resume.basics, classic=classic)
+    lines = _basic_info_lines(resume.basics, classic=False)
     if not lines:
         return
     for line in lines:
@@ -268,10 +317,41 @@ def _write_basic_info_block(
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         paragraph.paragraph_format.space_after = Pt(1 if compact else 2)
         for run in paragraph.runs:
-            _style_run(run, style["font"], 9 if compact else 9.5, "333333" if classic else "4B5563")
+            _style_run(run, style["font"], 9 if compact else 9.5, "4B5563")
+
+
+def _classic_info_lines(basics) -> list[str]:
+    """Build LaTeX-like \\contactInfo then \\otherInfo rows (max 4 items each)."""
+    contact = " · ".join(
+        value
+        for value in [
+            f"手机：{basics.phone}" if basics.phone.strip() else "",
+            f"邮箱：{basics.email}" if basics.email.strip() else "",
+            f"微信：{basics.wechat}" if basics.wechat.strip() else "",
+        ]
+        if value
+    )
+    other_items = [
+        value
+        for value in [
+            f"性别：{basics.gender}" if basics.gender.strip() else "",
+            f"现居：{basics.location}" if basics.location.strip() else "",
+            f"政治面貌：{basics.political_status}" if basics.political_status.strip() else "",
+            f"生日：{basics.birthday}" if basics.birthday.strip() else "",
+        ]
+        if value
+    ]
+    lines: list[str] = []
+    if contact:
+        lines.append(contact)
+    for index in range(0, len(other_items), 4):
+        lines.append(" · ".join(other_items[index : index + 4]))
+    return lines
 
 
 def _basic_info_lines(basics, *, classic: bool = False) -> list[str]:
+    if classic:
+        return _classic_info_lines(basics)
     identity = " · ".join(
         value
         for value in [
@@ -285,14 +365,12 @@ def _basic_info_lines(basics, *, classic: bool = False) -> list[str]:
     contact = " · ".join(
         value
         for value in [
-            f"{'手机' if classic else '电话'}：{basics.phone}" if basics.phone.strip() else "",
+            f"电话：{basics.phone}" if basics.phone.strip() else "",
             f"邮箱：{basics.email}" if basics.email.strip() else "",
             f"微信：{basics.wechat}" if basics.wechat.strip() else "",
         ]
         if value
     )
-    if classic:
-        return [line for line in [contact, identity] if line]
     return [line for line in [identity, contact] if line]
 
 
@@ -330,6 +408,45 @@ def _heading(
     )
     if classic:
         _set_paragraph_bottom_border(paragraph, color="111111")
+
+
+def _classic_education_entry(
+    document: Document,
+    institution: str,
+    field: str,
+    degree: str,
+    start: str,
+    end: str,
+    style: dict,
+) -> None:
+    """\\datedsubsection{\\textbf{学校}，专业，\\textit{学位}}{dates}"""
+    from docx.enum.text import WD_TAB_ALIGNMENT, WD_TAB_LEADER
+
+    paragraph = document.add_paragraph()
+    paragraph.paragraph_format.space_before = Pt(2)
+    paragraph.paragraph_format.space_after = Pt(1)
+    usable = (
+        document.sections[0].page_width
+        - document.sections[0].left_margin
+        - document.sections[0].right_margin
+    )
+    paragraph.paragraph_format.tab_stops.add_tab_stop(usable, WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.SPACES)
+
+    _style_run(paragraph.add_run(institution.strip() or " "), style["font"], 10.5, "111111", bold=True)
+    if field.strip():
+        _style_run(paragraph.add_run(f"，{field.strip()}"), style["font"], 10.5, "111111")
+    if degree.strip():
+        _style_run(
+            paragraph.add_run(f"，{degree.strip()}"),
+            style["font"],
+            10.5,
+            "111111",
+            italic=True,
+        )
+    dates = " - ".join(value for value in [start, end] if value)
+    if dates:
+        paragraph.add_run("\t")
+        _style_run(paragraph.add_run(dates), style["font"], 10.5, "333333")
 
 
 def _entry_title(
@@ -389,10 +506,14 @@ def _set_paragraph_bottom_border(paragraph, *, color: str = "111111") -> None:
     p_pr.append(p_bdr)
 
 
-def _bullets(document: Document, values: list[str]) -> None:
+def _bullets(document: Document, values: list[str], *, classic: bool = False) -> None:
     for value in values:
-        if value:
-            document.add_paragraph(value, style="List Bullet")
+        if not value:
+            continue
+        paragraph = document.add_paragraph(value, style="List Bullet")
+        if classic:
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(2)
 
 
 def _style_run(
@@ -402,9 +523,11 @@ def _style_run(
     color: str,
     *,
     bold: bool = False,
+    italic: bool = False,
 ) -> None:
     run.font.name = font
     run._element.rPr.rFonts.set(qn("w:eastAsia"), font)
     run.font.size = Pt(size)
     run.font.color.rgb = RGBColor.from_string(color)
     run.bold = bold
+    run.italic = italic

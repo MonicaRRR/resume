@@ -1,4 +1,4 @@
-.PHONY: install dev test build e2e
+.PHONY: install dev test build e2e seed-smoke smoke-sandbox whitebox whitebox-campus
 
 install:
 	cd backend && uv sync
@@ -20,3 +20,19 @@ build:
 
 e2e:
 	cd web && pnpm e2e
+
+seed-smoke:
+	cd backend && .venv/bin/python scripts/seed_smoke_profile.py
+	cd backend && .venv/bin/python scripts/seed_smoke_project.py
+
+smoke-sandbox:
+	cd backend && .venv/bin/python scripts/smoke_sandbox.py
+
+whitebox:
+	cd backend && .venv/bin/python scripts/whitebox_optimization.py
+
+whitebox-campus:
+	cd backend && .venv/bin/python scripts/whitebox_optimization.py \
+		--tag campus \
+		--profile fixtures/smoke_profile_campus.json \
+		--project fixtures/smoke_project_campus.json

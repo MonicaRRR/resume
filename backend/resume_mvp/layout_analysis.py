@@ -156,27 +156,52 @@ def _short_tail_issues(
     *,
     threshold: float,
 ) -> list[LayoutIssue]:
+    """Find wrapped bullets whose last visible line is much shorter than earlier lines.
+
+    LibreOffice PDFs often split one Word paragraph across multiple text blocks and
+    keep the bullet glyph on its own line. Matching therefore scans consecutive
+    page lines, not only lines inside a single PDF block.
+    """
     issues: list[LayoutIssue] = []
+    used_paths: set[str] = set()
     for page in pages:
-        for paragraph in page.paragraphs:
-            for target_path, editable in _editable_paragraphs(paragraph, paths):
-                available_width = max(line.width for line in editable.lines)
-                if available_width <= 0:
+        lines = [line for paragraph in page.paragraphs for line in paragraph.lines]
+        index = 0
+        while index < len(lines):
+            matched: tuple[str, list[_Line], int] | None = None
+            for end in range(len(lines), index + 1, -1):
+                window = lines[index:end]
+                content = [line for line in window if _normalise_text(line.text)]
+                if len(content) < 2:
                     continue
-                ratio = editable.lines[-1].width / available_width
-                if ratio >= threshold:
+                target_path = paths.get(_normalise_text("".join(line.text for line in window)))
+                if not target_path or target_path in used_paths:
                     continue
+                matched = (target_path, content, end)
+                break
+            if matched is None:
+                index += 1
+                continue
+            target_path, content, end = matched
+            used_paths.add(target_path)
+            available_width = max(line.width for line in content)
+            if available_width <= 0:
+                index = end
+                continue
+            ratio = content[-1].width / available_width
+            if ratio < threshold:
                 issues.append(
                     LayoutIssue(
                         kind="short_tail",
                         severity="warning",
                         page=page.number,
                         target_path=target_path,
-                        text_excerpt=editable.text,
+                        text_excerpt="".join(line.text for line in content),
                         measured_ratio=ratio,
                         message="正文最后一行过短，建议调整措辞或换行",
                     )
                 )
+            index = end
     return issues
 
 
@@ -184,6 +209,7 @@ def _editable_paragraphs(
     paragraph: _Paragraph,
     paths: dict[str, str],
 ) -> list[tuple[str, _Paragraph]]:
+    """Keep for unit tests that inject synthetic single-block paragraphs."""
     matches: list[tuple[str, _Paragraph]] = []
     for start, line in enumerate(paragraph.lines):
         if not _normalise_text(line.text):
