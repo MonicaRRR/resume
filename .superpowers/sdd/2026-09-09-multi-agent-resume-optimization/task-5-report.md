@@ -38,3 +38,7 @@
 - Codex 与 OpenAI provider 暴露可选累计 `actual_call_count`。包装器优先使用本次调用前后的增量；不提供该字段的普通 `AIProvider` 仍按一次 facade 调用计数。覆盖了 Codex schema fallback 成功及 fallback 格式失败时均为两次 runner 调用的路径。
 - RED：新增上述回归后，`uv run pytest tests/test_provider_retry.py tests/test_openai_provider.py -v` 为 7 failed / 19 passed，失败与五项评审问题逐项对应。
 - GREEN：同一聚焦集为 26 passed；`uv run pytest tests/test_provider_retry.py tests/test_openai_provider.py tests/test_provider_api.py tests/test_codex_provider.py -v` 为 45 passed，6 个既有依赖弃用警告；`git diff --check` 通过。
+
+## Final verification
+
+- 2026-09-10：在 `codex/multi-agent-resume-optimization` tip 复跑 `tests/test_provider_retry.py tests/test_openai_provider.py tests/test_provider_api.py tests/test_codex_provider.py`，结果 45 passed。Task 5 关闭。

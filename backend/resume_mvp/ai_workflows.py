@@ -736,6 +736,7 @@ def _safe_resume(resume: ResumeDocument) -> dict:
     payload["basics"]["email"] = ""
     payload["basics"]["phone"] = ""
     payload["basics"]["wechat"] = ""
+    payload["basics"]["location"] = ""
     if payload["basics"].get("photo_data_url"):
         payload["basics"]["photo_data_url"] = "[已上传证件照]"
     return payload
