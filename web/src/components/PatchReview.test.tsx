@@ -18,6 +18,8 @@ const patch: ResumePatch = {
       reason: "突出岗位相关领域",
       jd_requirement_ids: ["req-1"],
       source_fact_ids: ["fact-1"],
+      layout_issue_ids: [],
+      expected_layout_benefit: "",
       risk: "low",
     },
     {
@@ -29,9 +31,12 @@ const patch: ResumePatch = {
       reason: "对齐职级表述",
       jd_requirement_ids: ["req-1"],
       source_fact_ids: ["fact-1"],
+      layout_issue_ids: [],
+      expected_layout_benefit: "",
       risk: "medium",
     },
   ],
+  experience_asks: [],
 };
 
 

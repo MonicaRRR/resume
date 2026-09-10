@@ -5,6 +5,7 @@ import {
   ImportResultSchema,
   JobAnalysisSchema,
   MatchReportSchema,
+  OptimizationRunSchema,
   PracticeSessionSchema,
   ProjectListSchema,
   ProjectSchema,
@@ -15,6 +16,7 @@ import {
   ResumeSchema,
   FactSchema,
   ResumeVersionSchema,
+  type OptimizationMode,
   type ProjectCreateInput,
   type ResumeDocument,
   type Fact,
@@ -71,6 +73,25 @@ export const api = {
   getQuestions: (id: string, provider: string) => request(`/api/projects/${id}/questions`, z.array(FollowupQuestionSchema), json("POST", { provider })),
   addFact: (id: string, statement: string, category = "补充回答") => request(`/api/projects/${id}/facts`, ResumeVersionSchema, json("POST", { statement, category, source_type: "questionnaire", user_confirmed: true })),
   suggestPatch: (id: string, provider: string) => request(`/api/projects/${id}/resume/suggest`, ResumePatchSchema, json("POST", { provider })),
+  createOptimizationRun: (projectId: string, mode: OptimizationMode, provider: string) => request(
+    `/api/projects/${projectId}/optimization-runs`,
+    OptimizationRunSchema,
+    json("POST", { mode, provider }),
+  ),
+  getOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}`,
+    OptimizationRunSchema,
+  ),
+  cancelOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}/cancel`,
+    OptimizationRunSchema,
+    { method: "POST" },
+  ),
+  resumeOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}/resume`,
+    OptimizationRunSchema,
+    { method: "POST" },
+  ),
   applyPatch: (id: string, patch: ResumePatch, accepted: string[]) => request(`/api/projects/${id}/resume/apply-patch`, ResumeVersionSchema, json("POST", { patch, accepted_operation_ids: accepted })),
   refinePatchOperation: (
     id: string,
