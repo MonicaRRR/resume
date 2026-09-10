@@ -424,6 +424,7 @@ export function WorkspacePage() {
               {patch ? (
                 <PatchReview
                   patch={patch}
+                  optimization={optimization.run}
                   onChange={setPatch}
                   onDiscuss={discussOperation}
                   onAnswerAsk={answerExperienceAsk}

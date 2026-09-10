@@ -1895,6 +1895,53 @@ select:focus-visible,
   opacity: 0.72;
 }
 
+.optimization-evidence-summary {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--apple-radius-lg);
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.optimization-evidence-summary ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optimization-evidence-summary small {
+  display: block;
+  margin-top: 8px;
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.optimization-stopped-alert {
+  margin: 0 0 10px;
+  color: #9a5b00;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.layout-benefit {
+  margin: 0 0 8px;
+  color: #0B7A3B;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.layout-issue-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  color: var(--apple-secondary-label);
+  font-size: 12px;
+}
+
 /* Patch / editor / template / export */
 .patch-review,
 .resume-editor,

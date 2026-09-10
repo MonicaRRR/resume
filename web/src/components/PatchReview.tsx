@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { ExperienceAsk, PatchDiscussionResult, ResumePatch, ResumePatchOperation } from "../types";
+import type {
+  ExperienceAsk,
+  LayoutIssue,
+  OptimizationRun,
+  PatchDiscussionResult,
+  ResumePatch,
+  ResumePatchOperation,
+} from "../types";
 import { AiAssistChat, type ChatMessage } from "./ui/AiAssistChat";
 import { DiffMarkdown } from "./ui/DiffMarkdown";
 
@@ -51,6 +58,22 @@ function operationIdsKey(operations: ResumePatchOperation[]): string {
 }
 
 
+function issuesById(run?: OptimizationRun | null): Map<string, LayoutIssue> {
+  const map = new Map<string, LayoutIssue>();
+  for (const issue of run?.baseline_layout_report?.issues ?? []) map.set(issue.id, issue);
+  for (const issue of run?.layout_report?.issues ?? []) map.set(issue.id, issue);
+  return map;
+}
+
+
+function averageDensity(report: { density_by_page: number[] } | null | undefined): string | null {
+  const values = report?.density_by_page ?? [];
+  if (!values.length) return null;
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return `${Math.round(average * 100)}%`;
+}
+
+
 export type DiscussMessage = ChatMessage;
 
 
@@ -62,6 +85,7 @@ export function PatchReview({
   onAnswerAsk,
   askBusy = false,
   busy = false,
+  optimization,
 }: {
   patch: ResumePatch;
   onApply: (acceptedIds: string[]) => void;
@@ -70,6 +94,7 @@ export function PatchReview({
   onAnswerAsk?: (ask: ExperienceAsk, answer: string) => Promise<void>;
   askBusy?: boolean;
   busy?: boolean;
+  optimization?: OptimizationRun | null;
 }) {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -110,6 +135,7 @@ export function PatchReview({
     () => (total ? `${safeIndex + 1} / ${total}` : "0 / 0"),
     [safeIndex, total],
   );
+  const layoutCatalog = useMemo(() => issuesById(optimization), [optimization]);
 
   function acceptCurrent() {
     if (!current) return;
@@ -199,6 +225,18 @@ export function PatchReview({
   const after = displayValue(current.after);
   const accepted = selected.has(current.id);
   const draftAfter = pendingDraft ? displayValue(pendingDraft.after) : "";
+  const layoutIssues = (current.layout_issue_ids ?? [])
+    .map((issueId) => layoutCatalog.get(issueId))
+    .filter((issue): issue is LayoutIssue => Boolean(issue));
+  const baseline = optimization?.baseline_layout_report ?? null;
+  const finalLayout = optimization?.layout_report ?? null;
+  const quality = optimization?.quality ?? null;
+  const showStoppedAlert = Boolean(
+    optimization
+    && optimization.status === "ready_for_user"
+    && quality
+    && !quality.passed,
+  );
 
   const draftActions: ReactNode = pendingDraft ? (
     <div className="ai-assist-draft">
@@ -222,12 +260,41 @@ export function PatchReview({
     <section className="patch-review" aria-labelledby="patch-title">
       <div className="panel-heading">
         <div><span className="panel-index">04</span><h2 id="patch-title">逐项同意建议</h2></div>
-        <span>{selected.size}/{total} 已同意 · {progressLabel}</span>
+        <span>
+          <span>{selected.size}/{total} 已同意</span>
+          <span aria-hidden="true"> · </span>
+          <span>{progressLabel}</span>
+        </span>
       </div>
       <p className="panel-note">
         一次只看一条。右下角可与 AI 讨论；AI 可以反驳，只有你点「采用此改写」才会更新本条建议。
         <strong>默认全部不生效</strong>，只有你同意的条目才会写入新版本。
       </p>
+
+      {optimization && (
+        <div className="optimization-evidence-summary">
+          {showStoppedAlert && (
+            <p className="optimization-stopped-alert" role="alert">
+              已达到自动返工上限
+              {quality?.reasons?.length ? `：${quality.reasons.join("；")}` : "，仍可逐条审阅当前建议。"}
+            </p>
+          )}
+          <ul>
+            {quality && (
+              <li>JD 覆盖 {Math.round(quality.jd_coverage * 100)}%</li>
+            )}
+            {finalLayout && <li>实际 {finalLayout.page_count} 页</li>}
+            {baseline && finalLayout && baseline.page_count !== finalLayout.page_count && (
+              <li>页数 {baseline.page_count} → {finalLayout.page_count}</li>
+            )}
+            {averageDensity(baseline) && averageDensity(finalLayout) && (
+              <li>版面密度 {averageDensity(baseline)} → {averageDensity(finalLayout)}</li>
+            )}
+            {quality && <li>表达 {quality.expression_score} 分</li>}
+          </ul>
+          <small>本次简历与该 JD 的内部优化指标，不代表录取概率</small>
+        </div>
+      )}
 
       {asksBlock}
 
@@ -242,6 +309,16 @@ export function PatchReview({
             <span>{current.reason}</span>
             <span className={`risk-${current.risk}`}>{current.risk === "low" ? "低风险" : current.risk === "medium" ? "需确认" : "高风险"}</span>
           </div>
+          {current.expected_layout_benefit ? (
+            <p className="layout-benefit">{current.expected_layout_benefit}</p>
+          ) : null}
+          {layoutIssues.length > 0 && (
+            <ul className="layout-issue-list">
+              {layoutIssues.map((issue) => (
+                <li key={issue.id}>{issue.message}</li>
+              ))}
+            </ul>
+          )}
           <p className="diff-path"><code>{current.path}</code></p>
           <div className="diff-before" aria-label="修改前">
             <span className="diff-label">修改前</span>
