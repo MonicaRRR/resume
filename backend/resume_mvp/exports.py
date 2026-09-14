@@ -7,6 +7,8 @@ import re
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.image.image import Image
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
@@ -246,7 +248,34 @@ def _write_header(
     photo_paragraph = right.paragraphs[0]
     photo_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     run = photo_paragraph.add_run()
-    run.add_picture(BytesIO(photo), width=Cm(2.6), height=Cm(3.4))
+    _add_cropped_picture(run, photo, width=Cm(2.6), height=Cm(3.4))
+
+
+def _add_cropped_picture(run, photo: bytes, *, width, height) -> None:
+    shape = run.add_picture(BytesIO(photo), width=width, height=height)
+    try:
+        image = Image.from_blob(photo)
+        source_aspect = image.px_width / image.px_height
+        target_aspect = width / height
+    except (ValueError, ZeroDivisionError):
+        return
+
+    crop = {"l": 0, "r": 0, "t": 0, "b": 0}
+    if source_aspect > target_aspect:
+        horizontal = round((1 - target_aspect / source_aspect) * 50_000)
+        crop["l"] = crop["r"] = horizontal
+    elif source_aspect < target_aspect:
+        vertical = round((1 - source_aspect / target_aspect) * 50_000)
+        crop["t"] = crop["b"] = vertical
+    else:
+        return
+
+    source_rectangle = OxmlElement("a:srcRect")
+    for side, value in crop.items():
+        if value:
+            source_rectangle.set(side, str(value))
+    blip_fill = shape._inline.graphic.graphicData.pic.blipFill
+    blip_fill.insert(1, source_rectangle)
 
 
 def _write_basic_info_block(

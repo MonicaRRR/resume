@@ -8,6 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from resume_mvp.main import create_app
+from resume_mvp.domain import ResumeDocument, SourcedText
+from resume_mvp.exports import build_docx
 from resume_mvp.preview import (
     PreviewConversionError,
     convert_docx_to_pdf,
@@ -137,3 +139,30 @@ def test_convert_docx_to_pdf_with_libreoffice() -> None:
     pdf = convert_docx_to_pdf(buffer.getvalue())
     assert pdf[:4] == b"%PDF"
     assert count_pdf_pages(pdf) >= 1
+
+
+@pytest.mark.integration
+def test_preview_pdf_renders_chinese_with_a_cjk_font() -> None:
+    """Catches LibreOffice replacing Chinese glyphs with blank boxes."""
+    resume = ResumeDocument.blank()
+    resume.basics.name = "中文姓名"
+    resume.basics.target_role = SourcedText(value="中文岗位")
+    resume.basics.summary = SourcedText(value="中文内容验证")
+
+    pdf = convert_docx_to_pdf(build_docx(resume, "classic-cn"))
+    document = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        spans = [
+            span
+            for block in document[0].get_text("dict")["blocks"]
+            if "lines" in block
+            for line in block["lines"]
+            for span in line["spans"]
+            if any("\u4e00" <= char <= "\u9fff" for char in span["text"])
+        ]
+    finally:
+        document.close()
+
+    assert spans
+    cjk_font_markers = ("Songti", "PingFang", "Hiragino", "Sarasa", "NotoSansCJK", "NotoSerifCJK", "SimSun", "YaHei")
+    assert all(any(marker in span["font"] for marker in cjk_font_markers) for span in spans)

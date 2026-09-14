@@ -70,6 +70,16 @@ def test_docx_export_embeds_resume_photo_in_header() -> None:
     document = Document(BytesIO(build_docx(resume, "clear-single")))
     assert len(document.inline_shapes) >= 1
     assert "张宁" in _document_text(document)
+    shape = document.inline_shapes[0]
+    assert shape.width == Cm(2.6)
+    assert shape.height == Cm(3.4)
+    source_rectangles = document._element.xpath(".//*[local-name()='srcRect']")
+    assert len(source_rectangles) == 1
+    # The square source is center-cropped to the narrower portrait frame.
+    left = int(source_rectangles[0].get("l", "0"))
+    right = int(source_rectangles[0].get("r", "0"))
+    assert 11_000 <= left <= 12_000
+    assert left == right
 
 
 def test_json_export_excludes_secrets_and_contains_active_resume() -> None:
