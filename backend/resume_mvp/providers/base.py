@@ -22,6 +22,12 @@ class ProviderTimeoutError(ProviderError):
     pass
 
 
+class ProviderRateLimitError(ProviderError):
+    def __init__(self, message: str, retry_after_seconds: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class ProviderFormatError(ProviderError):
     def __init__(self, message: str, *, raw_response: str = "") -> None:
         super().__init__(message)

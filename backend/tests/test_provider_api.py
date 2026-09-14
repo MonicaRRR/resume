@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 
 from resume_mvp.main import create_app
 from resume_mvp.providers.codex import CodexDetectResult, CodexModelOption, ProcessResult, detect_codex, load_codex_model_options
+from resume_mvp.providers.base import ProviderRateLimitError
+
+
+class RateLimitedProvider:
+    async def complete_json(self, prompt: str, schema: type):
+        raise ProviderRateLimitError("1309 Coding Plan 套餐已到期", retry_after_seconds=2)
 
 
 def test_provider_settings_never_echo_api_key(tmp_path: Path) -> None:
@@ -29,6 +35,46 @@ def test_provider_settings_never_echo_api_key(tmp_path: Path) -> None:
     fetched = client.get("/api/settings/providers")
     assert "top-secret" not in fetched.text
     assert fetched.json()["configured"] is True
+
+
+def test_rejects_zhipu_coding_endpoint_for_flash_model(tmp_path: Path) -> None:
+    """Catches routing a public Flash model through the Coding Plan endpoint."""
+    client = TestClient(create_app(data_dir=tmp_path))
+
+    response = client.patch(
+        "/api/settings/providers",
+        json={
+            "kind": "openai-compatible",
+            "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+            "model": "glm-4.7-flash",
+            "api_key": "top-secret",
+            "timeout": 60,
+            "temperature": 0.2,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "ZHIPU_ENDPOINT_MODEL_MISMATCH",
+        "message": (
+            "glm-4.7-flash 需要使用智谱标准 API 地址 "
+            "https://open.bigmodel.cn/api/paas/v4；Coding Plan 地址请改用套餐支持的模型。"
+        ),
+    }
+
+
+def test_provider_probe_returns_rate_limit_status(tmp_path: Path) -> None:
+    """Catches an upstream 429 being mislabeled as a gateway failure."""
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"limited": RateLimitedProvider()}))
+
+    response = client.post("/api/settings/providers/test", json={"provider": "limited"})
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "PROVIDER_RATE_LIMITED",
+        "message": "1309 Coding Plan 套餐已到期",
+        "retry_after_seconds": 2.0,
+    }
 
 
 def test_codex_settings_persist_across_restarts(tmp_path: Path) -> None:

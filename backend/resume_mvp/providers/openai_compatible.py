@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from resume_mvp.providers.base import (
     ProviderAuthError,
     ProviderError,
+    ProviderRateLimitError,
     ProviderTimeoutError,
     validate_json_response,
 )
@@ -69,6 +70,17 @@ class OpenAICompatibleProvider:
 
         if response.status_code in {401, 403}:
             raise ProviderAuthError("模型服务拒绝了凭据")
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After", "").strip()
+            try:
+                retry_after_seconds = float(retry_after) if retry_after else None
+            except ValueError:
+                retry_after_seconds = None
+            detail = self._safe_error_detail(response)
+            message = "模型服务请求过于频繁或当前套餐不可用"
+            if detail:
+                message = f"{message}：{detail}"
+            raise ProviderRateLimitError(message, retry_after_seconds)
         if not response.is_success:
             raise ProviderError(f"模型服务返回错误状态 {response.status_code}")
         try:
@@ -86,3 +98,18 @@ class OpenAICompatibleProvider:
         if re.search(r"/v\d+(?:\.\d+)?$", self.base_url):
             return f"{self.base_url}/chat/completions"
         return f"{self.base_url}/v1/chat/completions"
+
+    def _safe_error_detail(self, response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+        except ValueError:
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        error = payload.get("error")
+        source = error if isinstance(error, dict) else payload
+        code = source.get("code")
+        message = source.get("message") or source.get("msg")
+        parts = [str(value).strip() for value in (code, message) if value is not None and str(value).strip()]
+        detail = " ".join(parts).replace("\r", " ").replace("\n", " ")[:300]
+        return detail.replace(self.api_key, "[已隐藏]") if self.api_key else detail

@@ -109,6 +109,17 @@ class ProviderRegistry:
     ) -> ProviderPublicState:
         if not base_url.strip() or not api_key or not model.strip():
             raise ProviderConfigurationError("PROVIDER_FIELDS_REQUIRED", "请填写 Base URL、API Key 和模型名称")
+        normalized_url = base_url.strip().rstrip("/")
+        normalized_model = model.strip().lower()
+        if (
+            normalized_url == "https://open.bigmodel.cn/api/coding/paas/v4"
+            and normalized_model.endswith("-flash")
+        ):
+            raise ProviderConfigurationError(
+                "ZHIPU_ENDPOINT_MODEL_MISMATCH",
+                "glm-4.7-flash 需要使用智谱标准 API 地址 "
+                "https://open.bigmodel.cn/api/paas/v4；Coding Plan 地址请改用套餐支持的模型。",
+            )
         self._kind = "openai-compatible"
         self._preferred_kind = "openai-compatible"
         self._base_url = base_url.strip()

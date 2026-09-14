@@ -33,7 +33,7 @@ from resume_mvp.matching import calculate_match
 from resume_mvp.layout_tidy import tidy_resume_for_layout
 from resume_mvp.patches import PatchConflictError, apply_resume_patch
 from resume_mvp.profile import profile_is_ready
-from resume_mvp.providers.base import ProviderError
+from resume_mvp.providers.base import ProviderError, ProviderRateLimitError
 from resume_mvp.repositories import ProjectNotFoundError, ProfileRequiredError, VersionNotFoundError
 
 
@@ -128,6 +128,16 @@ async def create_project(body: ProjectCreate, services: AppServices = Depends(ge
         if version is not None:
             report = await analyze_evidence_match(provider, analysis, version.resume, version.facts)
             project = services.repository.update(project.id, match_report=report)
+    except ProviderRateLimitError as error:
+        raise HTTPException(
+            429,
+            detail={
+                "code": "PROVIDER_RATE_LIMITED",
+                "message": f"项目已创建，但岗位分析被模型服务限流：{error}",
+                "retry_after_seconds": error.retry_after_seconds,
+                "project_id": project.id,
+            },
+        ) from error
     except ProviderError as error:
         raise HTTPException(
             502,

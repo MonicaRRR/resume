@@ -9,7 +9,7 @@ from resume_mvp.api.dependencies import (
     ProviderPublicState,
     get_services,
 )
-from resume_mvp.providers.base import ProviderError, ProviderTimeoutError
+from resume_mvp.providers.base import ProviderError, ProviderRateLimitError, ProviderTimeoutError
 
 
 router = APIRouter(prefix="/api/settings/providers", tags=["providers"])
@@ -140,5 +140,14 @@ async def test_provider(
         raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error
     except ProviderTimeoutError as error:
         raise HTTPException(504, detail={"code": "PROVIDER_TIMEOUT", "message": str(error)}) from error
+    except ProviderRateLimitError as error:
+        raise HTTPException(
+            429,
+            detail={
+                "code": "PROVIDER_RATE_LIMITED",
+                "message": str(error),
+                "retry_after_seconds": error.retry_after_seconds,
+            },
+        ) from error
     except ProviderError as error:
         raise HTTPException(502, detail={"code": "PROVIDER_UNAVAILABLE", "message": str(error)}) from error

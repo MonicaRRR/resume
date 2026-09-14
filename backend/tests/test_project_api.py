@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from resume_mvp.domain import JobAnalysis, JobRequirement, MatchReport, ResumePatch
 from resume_mvp.main import create_app
 from resume_mvp.providers import AIProvider
+from resume_mvp.providers.base import ProviderRateLimitError
 
 
 class JourneyProvider(AIProvider):
@@ -242,6 +243,34 @@ def test_create_project_requires_provider_when_profile_ready(tmp_path: Path) -> 
     )
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "PROVIDER_REQUIRED"
+
+
+def test_create_project_preserves_rate_limit_status_and_created_project(tmp_path: Path) -> None:
+    """Catches a created project being hidden behind a mislabeled provider failure."""
+    class RateLimitedProvider:
+        async def complete_json(self, prompt: str, schema: type):
+            raise ProviderRateLimitError("1309 Coding Plan 套餐已到期", retry_after_seconds=2)
+
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"limited": RateLimitedProvider()}))
+    _seed_profile(client)
+
+    response = client.post(
+        "/api/projects",
+        json={
+            "title": "后端工程师",
+            "company_name": "示例科技",
+            "application_type": "experienced",
+            "job_description": "负责 Python API",
+        },
+    )
+
+    assert response.status_code == 429
+    detail = response.json()["detail"]
+    assert detail["code"] == "PROVIDER_RATE_LIMITED"
+    assert detail["retry_after_seconds"] == 2.0
+    projects = client.get("/api/projects").json()
+    assert len(projects) == 1
+    assert detail["project_id"] == projects[0]["id"]
 
 
 def test_restore_from_profile_resets_corrupted_project_draft(tmp_path: Path) -> None:

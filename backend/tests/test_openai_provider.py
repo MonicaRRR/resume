@@ -4,7 +4,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from resume_mvp.providers.base import ProviderAuthError
+from resume_mvp.providers.base import ProviderAuthError, ProviderRateLimitError
 from resume_mvp.providers.openai_compatible import OpenAICompatibleProvider
 
 
@@ -76,4 +76,32 @@ async def test_openai_provider_maps_auth_error_without_leaking_key() -> None:
         await provider.complete_json("提取技能", SkillList)
     await client.aclose()
 
+    assert "top-secret" not in str(error.value)
+
+
+@pytest.mark.anyio
+async def test_openai_provider_preserves_safe_rate_limit_reason() -> None:
+    """Catches an actionable upstream 429 being collapsed into a generic 502."""
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429,
+            headers={"Retry-After": "2"},
+            json={"error": {"code": "1309", "message": "Coding Plan 套餐已到期"}},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(
+        base_url="https://open.bigmodel.cn/api/coding/paas/v4",
+        api_key="top-secret",
+        model="glm-4.7",
+        client=client,
+    )
+
+    with pytest.raises(ProviderRateLimitError) as error:
+        await provider.complete_json("提取技能", SkillList)
+    await client.aclose()
+
+    assert error.value.retry_after_seconds == 2
+    assert "1309" in str(error.value)
+    assert "套餐已到期" in str(error.value)
     assert "top-secret" not in str(error.value)
