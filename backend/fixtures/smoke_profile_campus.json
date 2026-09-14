@@ -1,0 +1,186 @@
+{
+  "basics": {
+    "name": "陈予安",
+    "gender": "女",
+    "birthday": "2003-03-21",
+    "email": "yuan.chen.campus@example.com",
+    "phone": "13900005678",
+    "location": "杭州",
+    "wechat": "chenya_campus",
+    "political_status": "共青团员",
+    "photo_data_url": "",
+    "target_role": {
+      "value": "后端开发（校招）",
+      "source_fact_ids": [],
+      "origin": "manual",
+      "confidence": 1
+    },
+    "summary": {
+      "value": "",
+      "source_fact_ids": [],
+      "origin": "manual",
+      "confidence": 1
+    }
+  },
+  "education": [
+    {
+      "id": "edu-zju-ms-campus",
+      "institution": "浙江大学",
+      "degree": "硕士",
+      "field": "软件工程",
+      "start_date": "2023-09",
+      "end_date": "2026-06",
+      "highlights": [
+        {
+          "value": "GPA 3.6/4.0；主修分布式系统、操作系统与计算机网络",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "edu-hznu-bs-campus",
+      "institution": "杭州师范大学",
+      "degree": "本科",
+      "field": "计算机科学与技术",
+      "start_date": "2019-09",
+      "end_date": "2023-06",
+      "highlights": [
+        {
+          "value": "校级一等奖学金；ACM 校队",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "work_experience": [
+    {
+      "id": "work-campus-aurora",
+      "company": "极光云科技有限公司",
+      "title": "后端开发实习生",
+      "start_date": "2025-06",
+      "end_date": "2025-09",
+      "bullets": [
+        {
+          "value": "后端开发实习：参与用户成长活动 API（FastAPI），活动期日均约 80 万次调用",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "为热点接口加 Redis 缓存与限流，P95 从约 260ms 降至 140ms",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "work-campus-northstar",
+      "company": "北辰数据股份有限公司",
+      "title": "后端开发实习生",
+      "start_date": "2024-07",
+      "end_date": "2024-09",
+      "bullets": [
+        {
+          "value": "用 FastAPI + MySQL 实现标注任务查询与状态流转；Celery 异步导出大文件",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-campus-im",
+      "name": "校园二手交易即时通讯",
+      "role": "后端负责人",
+      "start_date": "2022-10",
+      "end_date": "2023-05",
+      "bullets": [
+        {
+          "value": "WebSocket 会话与已读回执；峰值同时在线约 600；课程设计获院级优秀",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "proj-campus-matcher",
+      "name": "岗位 JD 与简历匹配原型",
+      "role": "全栈开发",
+      "start_date": "2024-11",
+      "end_date": "2025-02",
+      "bullets": [
+        {
+          "value": "规则抽取教育/实习字段，抽检准确率约 90%；React + FastAPI 演示台",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "skill-campus-all",
+      "name": "专业技能",
+      "items": [
+        { "value": "Python / FastAPI / SQL", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "MySQL / Redis / Celery / Docker 基础", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "Git / Linux；英语 CET-6", "source_fact_ids": [], "origin": "manual", "confidence": 1 }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "id": "cert-campus-cet6",
+      "name": "大学英语六级",
+      "detail": {
+        "value": "成绩 498",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2022-06"
+    }
+  ],
+  "awards": [
+    {
+      "id": "award-campus-scholarship",
+      "name": "校级一等奖学金",
+      "detail": {
+        "value": "本科阶段",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2021-11"
+    }
+  ],
+  "custom_sections": [],
+  "section_order": [
+    "basics",
+    "education",
+    "skills",
+    "work_experience",
+    "projects",
+    "certificates",
+    "awards"
+  ],
+  "layout_profile": {
+    "source_kind": "builtin",
+    "font_family": "",
+    "heading_font_family": "",
+    "accent_color": "",
+    "base_font_size": null,
+    "line_height": null,
+    "columns": 1,
+    "imported": false
+  }
+}

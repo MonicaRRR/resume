@@ -189,6 +189,24 @@ def test_summarize_codex_failure_permission_denied() -> None:
     assert "~/.codex/tmp" in message
 
 
+def test_summarize_codex_failure_revoked_oauth_token() -> None:
+    from resume_mvp.providers.codex import summarize_codex_failure
+
+    message = summarize_codex_failure(
+        "\n".join(
+            [
+                "401 Unauthorized: Encountered invalidated oauth token for user",
+                'auth error code: token_revoked',
+                "Failed to refresh token: Your session has ended. Please log in again.",
+                '"code": "refresh_token_invalidated"',
+            ]
+        )
+    )
+    assert "令牌已失效" in message
+    assert "尚未登录，请在本机执行" not in message
+    assert "codex login" in message
+
+
 @pytest.mark.anyio
 async def test_codex_probe_uses_short_timeout(tmp_path: Path) -> None:
     seen: dict[str, float] = {}

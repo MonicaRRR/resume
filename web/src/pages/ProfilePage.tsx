@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api, ApiError } from "../api/client";
@@ -14,6 +14,9 @@ export function ProfilePage() {
   const [draft, setDraft] = useState<ResumeDocument | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [qualityScore, setQualityScore] = useState<number | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profileQuery.data) setDraft(structuredClone(profileQuery.data.resume));
@@ -25,6 +28,8 @@ export function ProfilePage() {
       await queryClient.invalidateQueries({ queryKey: ["profile"] });
       setDraft(structuredClone(payload.resume));
       setError("");
+      setImportWarnings([]);
+      setQualityScore(null);
       setMessage(payload.ready
         ? `经历库已保存（${payload.facts.length} 条事实）。现在可以去创建求职项目，先分析 JD 再生成适配建议。`
         : "已保存。请至少填写姓名，以及教育 / 工作 / 项目 / 技能之一，才能创建求职项目。");
@@ -35,9 +40,39 @@ export function ProfilePage() {
     },
   });
 
+  const importResume = useMutation({
+    mutationFn: (file: File) => api.importProfileResume(file),
+    onSuccess: (result) => {
+      setDraft(structuredClone(result.resume));
+      setImportWarnings(result.warnings);
+      setQualityScore(result.quality_score);
+      setError("");
+      setMessage("已填入导入结果，请核对后点击保存经历库。");
+      if (fileRef.current) fileRef.current.value = "";
+    },
+    onError: (reason) => {
+      setMessage("");
+      setError(reason instanceof ApiError ? reason.message : "导入失败");
+      if (fileRef.current) fileRef.current.value = "";
+    },
+  });
+
+  function onPickFile(file: File) {
+    if (draft?.basics.name.trim()) {
+      const ok = window.confirm("用导入结果覆盖当前未保存草稿？");
+      if (!ok) {
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+    }
+    importResume.mutate(file);
+  }
+
   if (profileQuery.isLoading || !draft) {
     return <main className="page-placeholder"><h1>个人经历库</h1><p>正在读取本机资料……</p></main>;
   }
+
+  const busy = save.isPending || importResume.isPending;
 
   return (
     <main className="settings-page profile-page">
@@ -51,13 +86,52 @@ export function ProfilePage() {
       </header>
       {message && <div className="settings-message success" role="status">{message}</div>}
       {error && <div className="settings-message error" role="alert">{error}</div>}
+      {(qualityScore !== null || importWarnings.length > 0) && (
+        <div className="settings-message" role="status">
+          {qualityScore !== null && <p>解析质量分：{qualityScore.toFixed(2)}</p>}
+          {importWarnings.length > 0 && (
+            <ul>
+              {importWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
       <div className={`provider-card ${profileQuery.data?.ready ? "connected" : ""}`} style={{ minHeight: "auto" }}>
+        <div className="profile-import-bar">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            {importResume.isPending ? "正在解析…" : "上传已有简历"}
+          </button>
+          <input
+            ref={fileRef}
+            className="visually-hidden"
+            type="file"
+            accept=".docx,.pdf,.txt"
+            aria-label="上传已有简历"
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onPickFile(file);
+            }}
+          />
+          <p className="privacy-note">支持 PDF / DOCX / TXT（≤10 MiB）。导入只填入草稿，需点保存后才会写入经历库。</p>
+        </div>
         <ResumeEditor
           resume={draft}
           onChange={setDraft}
           onSave={() => save.mutate(draft)}
-          onDiscard={() => setDraft(structuredClone(profileQuery.data?.resume ?? blankResume()))}
-          busy={save.isPending}
+          onDiscard={() => {
+            setDraft(structuredClone(profileQuery.data?.resume ?? blankResume()));
+            setImportWarnings([]);
+            setQualityScore(null);
+            setMessage("");
+            setError("");
+          }}
+          busy={busy}
         />
         <p className="privacy-note">
           {profileQuery.data?.ready

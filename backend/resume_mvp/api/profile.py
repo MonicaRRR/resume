@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from resume_mvp.api.dependencies import AppServices, get_services
 from resume_mvp.domain import Fact, ResumeDocument
+from resume_mvp.ingestion import ImportResult, ResumeImportError, import_resume
 from resume_mvp.profile import profile_is_ready
 
 
@@ -31,3 +32,20 @@ def get_profile(services: AppServices = Depends(get_services)) -> ProfilePayload
 def save_profile(body: ProfileSaveInput, services: AppServices = Depends(get_services)) -> ProfilePayload:
     resume, facts = services.repository.save_profile(body.resume)
     return ProfilePayload(resume=resume, facts=facts, ready=profile_is_ready(resume))
+
+
+@router.post("/import", response_model=ImportResult)
+async def import_profile_resume(
+    file: UploadFile = File(...),
+    services: AppServices = Depends(get_services),
+) -> ImportResult:
+    """Parse an uploaded resume into structured fields without writing the profile yet."""
+    del services  # parsing is stateless; persistence stays on explicit PUT /api/profile
+    try:
+        return import_resume(
+            file.filename or "resume.txt",
+            file.content_type or "application/octet-stream",
+            await file.read(),
+        )
+    except ResumeImportError as error:
+        raise HTTPException(422, detail={"code": "IMPORT_FAILED", "message": str(error)}) from error

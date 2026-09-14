@@ -162,11 +162,18 @@ def test_classic_cn_docx_matches_reference_layout_tokens() -> None:
 
     document = Document(BytesIO(build_docx(resume, "classic-cn", "campus")))
     text = _document_text(document)
+    paragraphs = list(document.paragraphs)
 
+    assert paragraphs[0].text == "张宁"
+    assert paragraphs[0].alignment == 1  # WD_ALIGN_PARAGRAPH.CENTER
     assert "教育背景" in text
     assert "职业经历" in text
     assert "专业技能" in text
     assert "手机：13800000000" in text
+    assert "邮箱：private@example.com" in text
+    assert "微信：zhangning" in text
+    assert "性别：女" in text
+    assert "现居：上海" in text
     assert "示例大学，计算机，本科" in text
     assert "2020.09 - 2024.06" in text
     assert document.styles["Normal"].font.name == "SimSun"
@@ -175,6 +182,33 @@ def test_classic_cn_docx_matches_reference_layout_tokens() -> None:
     assert heading._p.pPr is not None
     borders = heading._p.pPr.xpath("./w:pBdr/w:bottom")
     assert borders, "classic-cn section headings need a bottom border"
+    # Degree run should be italic like \\textit{学位}.
+    edu_line = next(paragraph for paragraph in document.paragraphs if "示例大学" in paragraph.text)
+    degree_run = next(run for run in edu_line.runs if "本科" in run.text)
+    assert degree_run.italic
+    assert "个人简介" not in text
+    assert "专注可靠 API" not in text
+
+
+def test_classic_cn_keeps_name_centered_when_photo_present() -> None:
+    resume = sample_resume()
+    resume.basics.photo_data_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+    document = Document(BytesIO(build_docx(resume, "classic-cn", "campus")))
+    name = document.paragraphs[0]
+    assert name.text == "张宁"
+    assert name.alignment == 1  # CENTER
+    assert len(document.inline_shapes) >= 1
+    assert not document.tables, "classic-cn should not use left-name/right-photo table"
+
+
+def test_experienced_docx_still_exports_summary() -> None:
+    resume = sample_resume()
+    text = _document_text(Document(BytesIO(build_docx(resume, "classic-cn", "experienced"))))
+    assert "个人简介" in text
+    assert "专注可靠 API" in text
 
 
 def test_campus_docx_uses_compact_layout_tokens() -> None:

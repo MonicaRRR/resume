@@ -47,6 +47,9 @@ _MIME_BY_EXTENSION = {
 _SECTION_HEADINGS = {
     "工作经历": "work",
     "工作经验": "work",
+    "职业经历": "work",
+    "实习经历": "work",
+    "实习经验": "work",
     "项目经历": "project",
     "项目经验": "project",
     "教育经历": "education",
@@ -55,6 +58,8 @@ _SECTION_HEADINGS = {
     "技能": "skills",
     "证书": "certificate",
     "资格证书": "certificate",
+    "奖项": "certificate",
+    "荣誉奖项": "certificate",
 }
 
 

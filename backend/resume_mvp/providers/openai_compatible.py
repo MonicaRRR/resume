@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import TypeVar
 
@@ -9,8 +10,11 @@ from pydantic import BaseModel
 from resume_mvp.providers.base import (
     ProviderAuthError,
     ProviderError,
+    ProviderNetworkError,
     ProviderRateLimitError,
+    ProviderServerError,
     ProviderTimeoutError,
+    ProviderUsage,
     validate_json_response,
 )
 
@@ -35,11 +39,15 @@ class OpenAICompatibleProvider:
         self.timeout = timeout
         self.temperature = temperature
         self._client = client
+        self.last_usage: ProviderUsage | None = None
+        self.actual_call_count = 0
 
     async def complete_json(self, prompt: str, schema: type[T]) -> T:
+        self.last_usage = None
         client = self._client or httpx.AsyncClient()
         owns_client = self._client is None
         try:
+            self.actual_call_count += 1
             response = await client.post(
                 self._chat_url(),
                 headers={
@@ -63,7 +71,7 @@ class OpenAICompatibleProvider:
         except httpx.TimeoutException as error:
             raise ProviderTimeoutError("模型请求超时") from error
         except httpx.HTTPError as error:
-            raise ProviderError("无法连接模型服务") from error
+            raise ProviderNetworkError("无法连接模型服务") from error
         finally:
             if owns_client:
                 await client.aclose()
@@ -71,16 +79,15 @@ class OpenAICompatibleProvider:
         if response.status_code in {401, 403}:
             raise ProviderAuthError("模型服务拒绝了凭据")
         if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After", "").strip()
-            try:
-                retry_after_seconds = float(retry_after) if retry_after else None
-            except ValueError:
-                retry_after_seconds = None
-            detail = self._safe_error_detail(response)
-            message = "模型服务请求过于频繁或当前套餐不可用"
-            if detail:
-                message = f"{message}：{detail}"
-            raise ProviderRateLimitError(message, retry_after_seconds)
+            raise ProviderRateLimitError(
+                "模型服务请求过于频繁",
+                retry_after_seconds=_retry_after_seconds(response.headers.get("Retry-After")),
+            )
+        if 500 <= response.status_code <= 599:
+            raise ProviderServerError(
+                f"模型服务返回错误状态 {response.status_code}",
+                status_code=response.status_code,
+            )
         if not response.is_success:
             raise ProviderError(f"模型服务返回错误状态 {response.status_code}")
         try:
@@ -90,6 +97,7 @@ class OpenAICompatibleProvider:
             raise ProviderError("模型服务响应缺少消息内容") from error
         if not isinstance(content, str):
             raise ProviderError("模型服务响应消息不是文本")
+        self.last_usage = _usage_from_payload(payload)
         return validate_json_response(content, schema)
 
     def _chat_url(self) -> str:
@@ -99,17 +107,29 @@ class OpenAICompatibleProvider:
             return f"{self.base_url}/chat/completions"
         return f"{self.base_url}/v1/chat/completions"
 
-    def _safe_error_detail(self, response: httpx.Response) -> str:
-        try:
-            payload = response.json()
-        except ValueError:
-            return ""
-        if not isinstance(payload, dict):
-            return ""
-        error = payload.get("error")
-        source = error if isinstance(error, dict) else payload
-        code = source.get("code")
-        message = source.get("message") or source.get("msg")
-        parts = [str(value).strip() for value in (code, message) if value is not None and str(value).strip()]
-        detail = " ".join(parts).replace("\r", " ").replace("\n", " ")[:300]
-        return detail.replace(self.api_key, "[已隐藏]") if self.api_key else detail
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    if not math.isfinite(parsed) or parsed < 0:
+        return None
+    return parsed
+
+
+def _usage_from_payload(payload: object) -> ProviderUsage | None:
+    if not isinstance(payload, dict):
+        return None
+    raw_usage = payload.get("usage")
+    if not isinstance(raw_usage, dict):
+        return None
+    input_tokens = raw_usage.get("prompt_tokens")
+    output_tokens = raw_usage.get("completion_tokens")
+    input_value = input_tokens if isinstance(input_tokens, int) and not isinstance(input_tokens, bool) else None
+    output_value = output_tokens if isinstance(output_tokens, int) and not isinstance(output_tokens, bool) else None
+    if input_value is None and output_value is None:
+        return None
+    return ProviderUsage(input_tokens=input_value, output_tokens=output_value)

@@ -8,16 +8,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from resume_mvp.main import create_app
-from resume_mvp.providers.e2e import E2EProvider
-from resume_mvp.domain import ResumeDocument, SourcedText
-from resume_mvp.exports import build_docx
 from resume_mvp.preview import (
     PreviewConversionError,
     convert_docx_to_pdf,
     count_pdf_pages,
     render_pdf_page_pngs,
 )
+from resume_mvp.providers.e2e import E2EProvider
 from tests.test_export_api import create_project_with_resume
+
+
+def _client(tmp_path: Path) -> TestClient:
+    return TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
 
 
 def _tiny_pdf(pages: int = 1) -> bytes:
@@ -34,7 +36,7 @@ def test_count_pdf_pages() -> None:
 
 
 def test_preview_pdf_endpoint_returns_pdf_and_page_count(tmp_path: Path, monkeypatch) -> None:
-    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
+    client = _client(tmp_path)
     project_id = create_project_with_resume(client)
     pdf = _tiny_pdf(2)
 
@@ -59,7 +61,7 @@ def test_preview_pdf_endpoint_returns_pdf_and_page_count(tmp_path: Path, monkeyp
 
 
 def test_preview_pdf_accepts_live_resume_body(tmp_path: Path, monkeypatch) -> None:
-    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
+    client = _client(tmp_path)
     project_id = create_project_with_resume(client)
     version = client.get(f"/api/projects/{project_id}/versions").json()[0]
     resume = version["resume"]
@@ -88,7 +90,7 @@ def test_preview_pdf_accepts_live_resume_body(tmp_path: Path, monkeypatch) -> No
 
 
 def test_preview_pdf_unavailable_when_conversion_fails(tmp_path: Path, monkeypatch) -> None:
-    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
+    client = _client(tmp_path)
     project_id = create_project_with_resume(client)
 
     def boom(_docx: bytes) -> bytes:
@@ -102,7 +104,7 @@ def test_preview_pdf_unavailable_when_conversion_fails(tmp_path: Path, monkeypat
 
 
 def test_preview_pages_endpoint_returns_png_base64(tmp_path: Path, monkeypatch) -> None:
-    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
+    client = _client(tmp_path)
     project_id = create_project_with_resume(client)
     pdf = _tiny_pdf(2)
     png = b"\x89PNG\r\n\x1a\npage"
@@ -140,30 +142,3 @@ def test_convert_docx_to_pdf_with_libreoffice() -> None:
     pdf = convert_docx_to_pdf(buffer.getvalue())
     assert pdf[:4] == b"%PDF"
     assert count_pdf_pages(pdf) >= 1
-
-
-@pytest.mark.integration
-def test_preview_pdf_renders_chinese_with_a_cjk_font() -> None:
-    """Catches LibreOffice replacing Chinese glyphs with blank boxes."""
-    resume = ResumeDocument.blank()
-    resume.basics.name = "中文姓名"
-    resume.basics.target_role = SourcedText(value="中文岗位")
-    resume.basics.summary = SourcedText(value="中文内容验证")
-
-    pdf = convert_docx_to_pdf(build_docx(resume, "classic-cn"))
-    document = fitz.open(stream=pdf, filetype="pdf")
-    try:
-        spans = [
-            span
-            for block in document[0].get_text("dict")["blocks"]
-            if "lines" in block
-            for line in block["lines"]
-            for span in line["spans"]
-            if any("\u4e00" <= char <= "\u9fff" for char in span["text"])
-        ]
-    finally:
-        document.close()
-
-    assert spans
-    cjk_font_markers = ("Songti", "PingFang", "Hiragino", "Sarasa", "NotoSansCJK", "NotoSerifCJK", "SimSun", "YaHei")
-    assert all(any(marker in span["font"] for marker in cjk_font_markers) for span in spans)

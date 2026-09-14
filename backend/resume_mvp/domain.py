@@ -222,6 +222,8 @@ class ResumePatchOperation(BaseModel):
     reason: str
     jd_requirement_ids: list[str] = Field(default_factory=list)
     source_fact_ids: list[str] = Field(default_factory=list)
+    layout_issue_ids: list[str] = Field(default_factory=list)
+    expected_layout_benefit: str = ""
     risk: Literal["low", "medium", "high"] = "low"
 
 

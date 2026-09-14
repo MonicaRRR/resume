@@ -313,7 +313,13 @@ async def create_questions(
     if project.job_analysis is None:
         raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
     provider = _provider_or_422(services, body.provider)
-    return await generate_followup_questions(provider, project.job_analysis, version.resume, version.facts)
+    return await generate_followup_questions(
+        provider,
+        project.job_analysis,
+        version.resume,
+        version.facts,
+        project.application_type,
+    )
 
 
 @router.post("/{project_id}/facts", response_model=ResumeVersion)

@@ -1,49 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
-import type { ExperienceAsk, PatchDiscussionResult, ResumePatch, ResumePatchOperation } from "../types";
+import type {
+  ApplicationType,
+  ExperienceAsk,
+  OptimizationRun,
+  PatchDiscussionResult,
+  ResumeDocument,
+  ResumePatch,
+  ResumePatchOperation,
+} from "../types";
+import { AnnotatedResumePreview, displayPatchValue } from "./AnnotatedResumePreview";
 import { AiAssistChat, type ChatMessage } from "./ui/AiAssistChat";
 import { DiffMarkdown } from "./ui/DiffMarkdown";
-
-
-const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
-
-
-function scrubDisplayText(text: string): string {
-  return text
-    .replace(UUID_RE, "")
-    .replace(/[（\[]\s*[）\]]/g, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-
-function displayValue(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "string") return scrubDisplayText(value);
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) {
-    const lines = value.map((item) => displayValue(item).trim()).filter(Boolean);
-    return lines.join("\n");
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if ("value" in record) return scrubDisplayText(String(record.value ?? ""));
-    const chunks: string[] = [];
-    const titleBits = [record.company, record.name, record.institution, record.title, record.role, record.degree, record.field]
-      .map((item) => (typeof item === "string" ? scrubDisplayText(item) : ""))
-      .filter(Boolean);
-    if (titleBits.length) chunks.push(titleBits.join(" · "));
-    for (const key of ["bullets", "items", "highlights", "detail"] as const) {
-      if (key in record) {
-        const text = displayValue(record[key]).trim();
-        if (text) chunks.push(text);
-      }
-    }
-    if (chunks.length) return chunks.join("\n");
-  }
-  return "";
-}
 
 
 function operationIdsKey(operations: ResumePatchOperation[]): string {
@@ -56,20 +25,32 @@ export type DiscussMessage = ChatMessage;
 
 export function PatchReview({
   patch,
+  resume,
+  templateId,
+  projectId,
+  applicationType,
   onApply,
   onChange,
   onDiscuss,
   onAnswerAsk,
   askBusy = false,
   busy = false,
+  optimization,
+  previewHost = null,
 }: {
   patch: ResumePatch;
+  resume: ResumeDocument;
+  templateId: string;
+  projectId: string;
+  applicationType: ApplicationType;
   onApply: (acceptedIds: string[]) => void;
   onChange?: (patch: ResumePatch) => void;
   onDiscuss?: (operationId: string, message: string, history: DiscussMessage[]) => Promise<PatchDiscussionResult>;
   onAnswerAsk?: (ask: ExperienceAsk, answer: string) => Promise<void>;
   askBusy?: boolean;
   busy?: boolean;
+  optimization?: OptimizationRun | null;
+  previewHost?: HTMLElement | null;
 }) {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -98,7 +79,7 @@ export function PatchReview({
 
   const total = operations.length;
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1);
-  const current = operations[safeIndex];
+  const current = operations[safeIndex] ?? null;
   const history = current ? (histories[current.id] ?? []) : [];
 
   useEffect(() => {
@@ -106,24 +87,26 @@ export function PatchReview({
     setDiscussError("");
   }, [current?.id]);
 
-  const progressLabel = useMemo(
-    () => (total ? `${safeIndex + 1} / ${total}` : "0 / 0"),
-    [safeIndex, total],
-  );
+  const quality = optimization?.quality ?? null;
+  const qualityFailed = Boolean(quality && !quality.passed);
 
-  function acceptCurrent() {
-    if (!current) return;
-    setSelected((prev) => new Set(prev).add(current.id));
-    if (safeIndex < total - 1) setIndex(safeIndex + 1);
+  function acceptOperation(operationId: string) {
+    setSelected((prev) => new Set(prev).add(operationId));
+    const nextIndex = operations.findIndex((item) => item.id === operationId);
+    if (nextIndex >= 0 && nextIndex < total - 1) setIndex(nextIndex + 1);
   }
 
-  function rejectCurrent() {
-    if (!current) return;
+  function rejectOperation(operationId: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.delete(current.id);
+      next.delete(operationId);
       return next;
     });
+  }
+
+  function selectOperation(operationId: string) {
+    const nextIndex = operations.findIndex((item) => item.id === operationId);
+    if (nextIndex >= 0) setIndex(nextIndex);
   }
 
   async function sendDiscuss(message: string) {
@@ -159,29 +142,27 @@ export function PatchReview({
       ...prev,
       [current.id]: [
         ...(prev[current.id] ?? []),
-        { role: "assistant", content: "已采用本轮改写，建议卡片已更新。若还要调整可继续讨论。" },
+        { role: "assistant", content: "已采用本轮改写，批注已更新。若还要调整可继续讨论。" },
       ],
     }));
   }
 
   const experienceAsks = patch.experience_asks ?? [];
 
+  const asksBlock = experienceAsks.length > 0 ? (
+    <ExperienceAskPanel asks={experienceAsks} busy={askBusy || busy} onAnswer={onAnswerAsk} />
+  ) : null;
+
   if (!current && experienceAsks.length === 0) {
     return (
       <section className="patch-review">
         <div className="panel-heading">
-          <div><span className="panel-index">04</span><h2>逐项同意建议</h2></div>
+          <div><span className="panel-index">04</span><h2>建议确认</h2></div>
         </div>
         <p className="panel-note">当前没有可审阅的建议。</p>
       </section>
     );
   }
-
-  const asksBlock = experienceAsks.length > 0 && onAnswerAsk ? (
-    <ExperienceAskPanel asks={experienceAsks} busy={askBusy || busy} onAnswer={onAnswerAsk} />
-  ) : experienceAsks.length > 0 ? (
-    <ExperienceAskPanel asks={experienceAsks} busy={false} />
-  ) : null;
 
   if (!current) {
     return (
@@ -189,17 +170,13 @@ export function PatchReview({
         <div className="panel-heading">
           <div><span className="panel-index">04</span><h2>补充项目线索</h2></div>
         </div>
-        <p className="panel-note">AI 判断当前项目经历相对岗位偏少，先确认你是否还有可补充的相关经历；回答会记入事实库。</p>
+        <p className="panel-note">AI 判断当前项目经历相对岗位偏少，先确认你是否还有可补充的相关经历。</p>
         {asksBlock}
       </section>
     );
   }
 
-  const before = displayValue(current.before);
-  const after = displayValue(current.after);
-  const accepted = selected.has(current.id);
-  const draftAfter = pendingDraft ? displayValue(pendingDraft.after) : "";
-
+  const draftAfter = pendingDraft ? displayPatchValue(pendingDraft.after) : "";
   const draftActions: ReactNode = pendingDraft ? (
     <div className="ai-assist-draft">
       <p className="ai-assist-draft-label">AI 提出的改写（未写入，需你确认）</p>
@@ -218,75 +195,72 @@ export function PatchReview({
     </div>
   ) : null;
 
+  const board = (
+    <AnnotatedResumePreview
+      projectId={projectId}
+      applicationType={applicationType}
+      resume={resume}
+      templateId={templateId}
+      operations={operations}
+      selected={selected}
+      activeOperation={current}
+      onSelectOperation={selectOperation}
+      onAccept={acceptOperation}
+      onReject={rejectOperation}
+    />
+  );
+
   return (
-    <section className="patch-review" aria-labelledby="patch-title">
+    <section className="patch-review patch-review-annotations" aria-labelledby="patch-title">
       <div className="panel-heading">
-        <div><span className="panel-index">04</span><h2 id="patch-title">逐项同意建议</h2></div>
-        <span>{selected.size}/{total} 已同意 · {progressLabel}</span>
+        <div><span className="panel-index">04</span><h2 id="patch-title">建议确认</h2></div>
+        <span>{selected.size}/{total} 已同意</span>
       </div>
       <p className="panel-note">
-        一次只看一条。右下角可与 AI 讨论；AI 可以反驳，只有你点「采用此改写」才会更新本条建议。
-        <strong>默认全部不生效</strong>，只有你同意的条目才会写入新版本。
+        右侧是与导出同源的 Word/PDF 预览；批注栏标明修改位置。点「同意」后才会生效。
       </p>
+
+      {qualityFailed && quality?.reasons?.length ? (
+        <p className="optimization-quality-inline" role="status">
+          质量提醒：{quality.reasons.slice(0, 3).join("；")}
+          {quality.reasons.length > 3 ? "…" : ""}
+        </p>
+      ) : null}
 
       {asksBlock}
 
-      <article className={`patch-card single ${accepted ? "selected" : ""}`}>
-        <div className="patch-stepper">
-          <button type="button" className="text-button" disabled={safeIndex === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))}>上一项</button>
-          <strong>建议 {progressLabel}</strong>
-          <button type="button" className="text-button" disabled={safeIndex >= total - 1} onClick={() => setIndex((value) => Math.min(total - 1, value + 1))}>下一项</button>
-        </div>
-        <div className="patch-content">
-          <div className="patch-meta">
-            <span>{current.reason}</span>
-            <span className={`risk-${current.risk}`}>{current.risk === "low" ? "低风险" : current.risk === "medium" ? "需确认" : "高风险"}</span>
-          </div>
-          <p className="diff-path"><code>{current.path}</code></p>
-          <div className="diff-before" aria-label="修改前">
-            <span className="diff-label">修改前</span>
-            <DiffMarkdown text={before} empty="（空 / 建议移出投递版）" />
-          </div>
-          <div className="diff-after" aria-label="修改后">
-            <span className="diff-label">修改后</span>
-            <DiffMarkdown text={after} empty="（空）" />
-          </div>
-          <small>岗位依据 {current.jd_requirement_ids.length} 条 · 事实依据 {current.source_fact_ids.length} 条</small>
-        </div>
-        <div className="patch-actions">
-          <button type="button" className={accepted ? "primary-button" : "secondary-button"} onClick={acceptCurrent}>同意这项</button>
-          <button type="button" className="secondary-button" onClick={rejectCurrent} disabled={!accepted}>取消同意</button>
-        </div>
-      </article>
+      {previewHost ? createPortal(board, previewHost) : board}
 
-      <label className="privacy-confirm">
-        <input
-          type="checkbox"
-          checked={agreed}
-          onChange={(event) => setAgreed(event.target.checked)}
-          aria-label="我同意仅应用已勾选的建议"
-        />
-        <span><strong>我已阅读并同意</strong>仅将已点「同意这项」的建议应用到新版本；未同意内容保持不变。</span>
-      </label>
-      <button
-        className="primary-button"
-        type="button"
-        disabled={selected.size === 0 || !agreed || busy || discussBusy}
-        onClick={() => onApply([...selected])}
-      >
-        应用已同意的修改（{selected.size}）
-      </button>
+      <div className="patch-review-footer">
+        <label className="privacy-confirm">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(event) => setAgreed(event.target.checked)}
+            aria-label="我同意仅应用已勾选的建议"
+          />
+          <span><strong>我已阅读并同意</strong>仅将已点「同意」的批注应用到新版本。</span>
+        </label>
+        <button
+          className="primary-button"
+          type="button"
+          disabled={selected.size === 0 || !agreed || busy || discussBusy}
+          onClick={() => onApply([...selected])}
+        >
+          应用已同意的修改（{selected.size}）
+        </button>
+      </div>
 
       {onDiscuss ? (
         <AiAssistChat
           disabled={busy}
           busy={discussBusy}
           title="与 AI 讨论"
-          contextLabel={`正在讨论建议 ${progressLabel} · ${current.path}`}
+          contextLabel={`正在讨论批注 ${safeIndex + 1} · ${current.path}`}
           messages={history}
           error={discussError}
           onSend={sendDiscuss}
-          emptyHint="可以说你想怎么改；AI 可以同意、反驳或追问。只有你确认「采用此改写」后才会更新本条建议。"
+          emptyHint="可以说你想怎么改；只有你确认「采用此改写」后才会更新本条批注。"
           busyLabel="AI 正在思考…"
           footer={draftActions}
         />
@@ -305,94 +279,91 @@ function ExperienceAskPanel({
   busy: boolean;
   onAnswer?: (ask: ExperienceAsk, answer: string) => Promise<void>;
 }) {
-  const [activeId, setActiveId] = useState(asks[0]?.id ?? "");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
-  const active = asks.find((item) => item.id === activeId) ?? asks[0];
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const current = asks[Math.min(index, Math.max(asks.length - 1, 0))];
+  if (!current) return null;
 
-  useEffect(() => {
-    if (!asks.some((item) => item.id === activeId)) {
-      setActiveId(asks[0]?.id ?? "");
-    }
-  }, [asks, activeId]);
-
-  if (!active) return null;
-
-  const guidanceLines = active.guidance
+  const guidanceLines = (current.guidance || "")
     .split(/\n|·/)
     .map((line) => line.replace(/^[\s•\-]+/, "").trim())
     .filter(Boolean);
-
-  async function submit() {
-    if (!onAnswer) return;
-    const text = (drafts[active.id] ?? "").trim();
-    if (!text) {
-      setError("请先写一两句相关经历，或点跳过");
-      return;
-    }
-    setError("");
-    await onAnswer(active, text);
-    setDrafts((prev) => ({ ...prev, [active.id]: "" }));
-  }
+  const keywords = current.jd_keywords ?? [];
+  const step = Math.min(index + 1, asks.length);
 
   return (
-    <section className="experience-ask-panel" aria-label="项目补充追问">
-      <div className="panel-heading">
-        <div><strong>项目可能偏少</strong></div>
-        <span>{asks.length} 条追问</span>
-      </div>
-      <p className="panel-note">AI 不会替你编项目；若你确实还有相关经历，按提示回忆后写下来，会记入事实库，便于下一轮适配。</p>
-      {asks.length > 1 && (
-        <div className="patch-stepper">
-          {asks.map((ask, index) => (
-            <button
-              key={ask.id}
-              type="button"
-              className={ask.id === active.id ? "text-button active" : "text-button"}
-              onClick={() => setActiveId(ask.id)}
-            >
-              追问 {index + 1}
-            </button>
-          ))}
+    <section className="experience-ask-sheet" aria-labelledby="experience-ask-title">
+      <header className="experience-ask-sheet-head">
+        <div>
+          <span className="experience-ask-eyebrow">可选补充</span>
+          <h3 id="experience-ask-title">项目线索</h3>
         </div>
-      )}
-      <article className="question-card experience-ask-card">
-        <span>{active.topic}</span>
-        <h3>{active.question}</h3>
-        {guidanceLines.length > 0 && (
-          <ul className="ask-guidance">
-            {guidanceLines.map((line) => <li key={line}>{line}</li>)}
+        <span className="experience-ask-step" aria-label={`第 ${step} 条，共 ${asks.length} 条`}>
+          {step}/{asks.length}
+        </span>
+      </header>
+
+      <div className="experience-ask-body">
+        {current.topic ? <span className="experience-ask-topic">{current.topic}</span> : null}
+        <p className="experience-ask-question">{current.question}</p>
+
+        {guidanceLines.length > 0 ? (
+          <ul className="experience-ask-hints">
+            {guidanceLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
           </ul>
-        )}
-        {active.jd_keywords.length > 0 && (
-          <p className="ask-keywords">可对齐关键词：{active.jd_keywords.join("、")}</p>
-        )}
+        ) : null}
+
+        {keywords.length > 0 ? (
+          <div className="experience-ask-keywords" aria-label="相关关键词">
+            {keywords.map((keyword) => (
+              <span key={keyword}>{keyword}</span>
+            ))}
+          </div>
+        ) : null}
+
         {onAnswer ? (
           <>
-            <textarea
-              aria-label="补充相关项目"
-              rows={4}
-              value={drafts[active.id] ?? ""}
-              onChange={(event) => setDrafts((prev) => ({ ...prev, [active.id]: event.target.value }))}
-              placeholder="例：大三课程《XX》做过一个…；或参加过黑客松做了…；没有可直接跳过"
-            />
-            {error && <p className="form-error" role="alert">{error}</p>}
-            <div className="button-row">
-              <button type="button" className="primary-button" disabled={busy} onClick={() => void submit()}>
-                保存为事实
+            <label className="experience-ask-field">
+              <span>你的补充</span>
+              <textarea
+                aria-label="补充项目回答"
+                rows={4}
+                value={answer}
+                disabled={busy}
+                onChange={(event) => setAnswer(event.target.value)}
+                placeholder="有相关经历就写清行动与结果；没有可直接跳过"
+              />
+            </label>
+            <div className="experience-ask-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy || !answer.trim()}
+                onClick={async () => {
+                  await onAnswer(current, answer.trim());
+                  setAnswer("");
+                  setIndex((value) => value + 1);
+                }}
+              >
+                保存到事实库
               </button>
               <button
                 type="button"
                 className="secondary-button"
                 disabled={busy}
-                onClick={() => void onAnswer(active, "")}
+                onClick={() => {
+                  setAnswer("");
+                  setIndex((value) => value + 1);
+                }}
               >
-                暂时没有 / 跳过
+                跳过
               </button>
             </div>
           </>
         ) : null}
-      </article>
+      </div>
     </section>
   );
 }

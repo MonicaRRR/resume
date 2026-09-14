@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
 from fastapi import Request
 
@@ -10,6 +10,9 @@ from resume_mvp.provider_store import load_provider_settings, save_provider_sett
 from resume_mvp.providers import AIProvider, CodexProvider, OpenAICompatibleProvider
 from resume_mvp.repositories import ProjectRepository
 from resume_mvp.secret_store import SecretStore, provider_key_account
+
+if TYPE_CHECKING:
+    from resume_mvp.optimization_orchestrator import OptimizationOrchestrator
 
 
 class ProviderConfigurationError(ValueError):
@@ -261,6 +264,7 @@ class ProviderRegistry:
 class AppServices:
     repository: ProjectRepository
     providers: ProviderRegistry
+    optimization: OptimizationOrchestrator
 
 
 def get_services(request: Request) -> AppServices:

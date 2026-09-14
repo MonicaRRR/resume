@@ -105,9 +105,21 @@ export const ImportResultSchema = z.object({
   quality_score: z.number(), warnings: z.array(z.string()), version_id: z.string(),
 });
 
+/** Profile import returns parse result only (no project version). */
+export const ProfileImportResultSchema = z.object({
+  resume: ResumeSchema,
+  facts: z.array(FactSchema),
+  layout_profile: ResumeSchema.shape.layout_profile,
+  quality_score: z.number(),
+  warnings: z.array(z.string()),
+});
+export type ProfileImportResult = z.infer<typeof ProfileImportResultSchema>;
+
 export const PatchOperationSchema = z.object({
   id: z.string(), op: z.enum(["replace", "reorder"]), path: z.string(), before: z.unknown(), after: z.unknown(),
   reason: z.string(), jd_requirement_ids: z.array(z.string()), source_fact_ids: z.array(z.string()),
+  layout_issue_ids: z.array(z.string()).default([]),
+  expected_layout_benefit: z.string().default(""),
   risk: z.enum(["low", "medium", "high"]),
 });
 export type ResumePatchOperation = z.infer<typeof PatchOperationSchema>;
@@ -138,6 +150,100 @@ export const FollowupQuestionSchema = z.object({
   id: z.string(), question: z.string(), topic: z.string(), requirement_id: z.string(),
   rationale: z.string(), guidance: z.string().default(""), skippable: z.boolean(),
 });
+
+export const OptimizationModeSchema = z.enum(["quick", "deep"]);
+export type OptimizationMode = z.infer<typeof OptimizationModeSchema>;
+
+export const OptimizationStatusSchema = z.enum([
+  "queued",
+  "analyzing",
+  "waiting_for_user",
+  "optimizing",
+  "rendering",
+  "reviewing",
+  "retry_wait",
+  "ready_for_user",
+  "failed",
+  "cancelled",
+]);
+export type OptimizationStatus = z.infer<typeof OptimizationStatusSchema>;
+
+export const LayoutIssueSchema = z.object({
+  id: z.string(),
+  kind: z.enum([
+    "short_tail",
+    "orphan_heading",
+    "awkward_page_break",
+    "sparse_last_page",
+    "one_page_overflow",
+  ]),
+  severity: z.enum(["info", "warning", "severe"]),
+  message: z.string(),
+  page: z.number().default(1),
+  target_path: z.string().default(""),
+  text_excerpt: z.string().default(""),
+  measured_ratio: z.number().nullable().default(null),
+});
+export type LayoutIssue = z.infer<typeof LayoutIssueSchema>;
+
+export const LayoutReportSchema = z.object({
+  page_count: z.number(),
+  density_by_page: z.array(z.number()).default([]),
+  issues: z.array(LayoutIssueSchema).default([]),
+  severe_issue_count: z.number().default(0),
+});
+export type LayoutReport = z.infer<typeof LayoutReportSchema>;
+
+export const OptimizationReviewSchema = z.object({
+  factuality_passed: z.boolean(),
+  expression_score: z.number(),
+  requires_user_input: z.boolean().default(false),
+  questions: z.array(FollowupQuestionSchema).default([]),
+  rejection_reasons: z.array(z.string()).default([]),
+  refinement_instructions: z.array(z.string()).default([]),
+});
+export type OptimizationReview = z.infer<typeof OptimizationReviewSchema>;
+
+export const QualityGateResultSchema = z.object({
+  passed: z.boolean(),
+  factuality_passed: z.boolean(),
+  traceability: z.number(),
+  jd_coverage: z.number(),
+  expression_score: z.number(),
+  page_policy_passed: z.boolean(),
+  severe_layout_issues: z.number(),
+  reasons: z.array(z.string()).default([]),
+});
+export type QualityGateResult = z.infer<typeof QualityGateResultSchema>;
+
+export const OptimizationRunSchema = z.object({
+  id: z.string(),
+  project_id: z.string(),
+  input_version_id: z.string(),
+  template_id: z.string(),
+  provider: z.string(),
+  model: z.string().default(""),
+  prompt_version: z.string().default("multi-agent-v1"),
+  mode: OptimizationModeSchema,
+  status: OptimizationStatusSchema,
+  iteration: z.number().default(0),
+  max_refinements: z.number().default(2),
+  max_model_calls: z.number().default(12),
+  max_total_tokens: z.number().default(120_000),
+  call_count: z.number().default(0),
+  input_tokens: z.number().nullable().default(null),
+  output_tokens: z.number().nullable().default(null),
+  patch: ResumePatchSchema.nullable().default(null),
+  baseline_layout_report: LayoutReportSchema.nullable().default(null),
+  layout_report: LayoutReportSchema.nullable().default(null),
+  review: OptimizationReviewSchema.nullable().default(null),
+  quality: QualityGateResultSchema.nullable().default(null),
+  message: z.string().default(""),
+  cancel_requested: z.boolean().default(false),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type OptimizationRun = z.infer<typeof OptimizationRunSchema>;
 
 export const ProviderSettingsSchema = z.object({
   kind: z.string(), base_url: z.string(), model: z.string(), timeout: z.number(), temperature: z.number(),

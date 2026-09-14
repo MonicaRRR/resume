@@ -3,8 +3,10 @@ import { z } from "zod";
 import {
   FollowupQuestionSchema,
   ImportResultSchema,
+  ProfileImportResultSchema,
   JobAnalysisSchema,
   MatchReportSchema,
+  OptimizationRunSchema,
   PracticeSessionSchema,
   ProjectListSchema,
   ProjectSchema,
@@ -15,6 +17,7 @@ import {
   ResumeSchema,
   FactSchema,
   ResumeVersionSchema,
+  type OptimizationMode,
   type ProjectCreateInput,
   type ResumeDocument,
   type Fact,
@@ -71,6 +74,29 @@ export const api = {
   getQuestions: (id: string, provider: string) => request(`/api/projects/${id}/questions`, z.array(FollowupQuestionSchema), json("POST", { provider })),
   addFact: (id: string, statement: string, category = "补充回答") => request(`/api/projects/${id}/facts`, ResumeVersionSchema, json("POST", { statement, category, source_type: "questionnaire", user_confirmed: true })),
   suggestPatch: (id: string, provider: string) => request(`/api/projects/${id}/resume/suggest`, ResumePatchSchema, json("POST", { provider })),
+  createOptimizationRun: (projectId: string, mode: OptimizationMode, provider: string) => request(
+    `/api/projects/${projectId}/optimization-runs`,
+    OptimizationRunSchema,
+    json("POST", { mode, provider }),
+  ),
+  getLatestOptimizationRun: (projectId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/latest`,
+    OptimizationRunSchema.nullable(),
+  ),
+  getOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}`,
+    OptimizationRunSchema,
+  ),
+  cancelOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}/cancel`,
+    OptimizationRunSchema,
+    { method: "POST" },
+  ),
+  resumeOptimizationRun: (projectId: string, runId: string) => request(
+    `/api/projects/${projectId}/optimization-runs/${runId}/resume`,
+    OptimizationRunSchema,
+    { method: "POST" },
+  ),
   applyPatch: (id: string, patch: ResumePatch, accepted: string[]) => request(`/api/projects/${id}/resume/apply-patch`, ResumeVersionSchema, json("POST", { patch, accepted_operation_ids: accepted })),
   refinePatchOperation: (
     id: string,
@@ -105,6 +131,11 @@ export const api = {
     facts: z.array(FactSchema),
     ready: z.boolean(),
   }), json("PUT", { resume })),
+  importProfileResume: async (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request("/api/profile/import", ProfileImportResultSchema, { method: "POST", body });
+  },
   createPractice: (projectId: string, kind: "interview" | "written", provider: string) => request(`/api/projects/${projectId}/practice/sessions`, PracticeSessionSchema, json("POST", { kind, provider })),
   getPractice: (sessionId: string) => request(`/api/practice/sessions/${sessionId}`, PracticeSessionSchema),
   answerPractice: (sessionId: string, answer: string, provider: string) => request(`/api/practice/sessions/${sessionId}/answer`, PracticeSessionSchema, json("POST", { answer, provider })),

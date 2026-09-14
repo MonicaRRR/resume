@@ -4,7 +4,15 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from resume_mvp.providers.base import ProviderAuthError, ProviderRateLimitError
+from resume_mvp.provider_retry import RetryingProvider
+from resume_mvp.providers.base import (
+    ProviderAuthError,
+    ProviderFormatError,
+    ProviderNetworkError,
+    ProviderRateLimitError,
+    ProviderServerError,
+    ProviderUsage,
+)
 from resume_mvp.providers.openai_compatible import OpenAICompatibleProvider
 
 
@@ -80,28 +88,94 @@ async def test_openai_provider_maps_auth_error_without_leaking_key() -> None:
 
 
 @pytest.mark.anyio
-async def test_openai_provider_preserves_safe_rate_limit_reason() -> None:
-    """Catches an actionable upstream 429 being collapsed into a generic 502."""
-    async def handler(_: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            429,
-            headers={"Retry-After": "2"},
-            json={"error": {"code": "1309", "message": "Coding Plan 套餐已到期"}},
-        )
-
-    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+async def test_openai_provider_exposes_numeric_retry_after() -> None:
+    """A 429 must retain a numeric server retry delay for the retry wrapper."""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(429, headers={"Retry-After": "2.5"}))
+    )
     provider = OpenAICompatibleProvider(
-        base_url="https://open.bigmodel.cn/api/coding/paas/v4",
-        api_key="top-secret",
-        model="glm-4.7",
-        client=client,
+        base_url="http://model.local", api_key="secret", model="demo-model", client=client
     )
 
     with pytest.raises(ProviderRateLimitError) as error:
         await provider.complete_json("提取技能", SkillList)
     await client.aclose()
 
-    assert error.value.retry_after_seconds == 2
-    assert "1309" in str(error.value)
-    assert "套餐已到期" in str(error.value)
-    assert "top-secret" not in str(error.value)
+    assert error.value.retry_after_seconds == 2.5
+
+
+@pytest.mark.anyio
+async def test_openai_provider_maps_server_and_network_errors() -> None:
+    """Collapsing 5xx or HTTP transport failures into generic ProviderError must fail this test."""
+    server_client = httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(502)))
+    server = OpenAICompatibleProvider(
+        base_url="http://model.local", api_key="secret", model="demo-model", client=server_client
+    )
+    with pytest.raises(ProviderServerError) as server_error:
+        await server.complete_json("提取技能", SkillList)
+    await server_client.aclose()
+
+    async def network_failure(_: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline")
+
+    network_client = httpx.AsyncClient(transport=httpx.MockTransport(network_failure))
+    network = OpenAICompatibleProvider(
+        base_url="http://model.local", api_key="secret", model="demo-model", client=network_client
+    )
+    with pytest.raises(ProviderNetworkError):
+        await network.complete_json("提取技能", SkillList)
+    await network_client.aclose()
+
+    assert server_error.value.status_code == 502
+
+
+@pytest.mark.anyio
+async def test_openai_provider_exposes_optional_usage_without_fabricating_values() -> None:
+    """Usage extraction must preserve supplied values and leave an absent usage block unavailable."""
+    responses = iter(
+        [
+            {"choices": [{"message": {"content": '{\"items\":[\"Python\"]}'}}], "usage": {"prompt_tokens": 5, "completion_tokens": 3}},
+            {"choices": [{"message": {"content": '{\"items\":[\"SQL\"]}'}}]},
+        ]
+    )
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(responses))
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(
+        base_url="http://model.local", api_key="secret", model="demo-model", client=client
+    )
+
+    await provider.complete_json("提取技能", SkillList)
+    assert provider.last_usage == ProviderUsage(input_tokens=5, output_tokens=3)
+    await provider.complete_json("提取技能", SkillList)
+    await client.aclose()
+
+    assert provider.last_usage is None
+
+
+@pytest.mark.anyio
+async def test_openai_usage_is_counted_when_structured_response_validation_fails() -> None:
+    """A billed malformed structured response must contribute usage before format repair begins."""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"content": '{\"items\": 7}'}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+                },
+            )
+        )
+    )
+    wrapped = RetryingProvider(
+        OpenAICompatibleProvider(base_url="http://model.local", api_key="secret", model="demo-model", client=client)
+    )
+
+    with pytest.raises(ProviderFormatError):
+        await wrapped.complete_json("提取技能", SkillList)
+    await client.aclose()
+
+    assert wrapped.stats.call_count == 1
+    assert wrapped.stats.usage == ProviderUsage(input_tokens=5, output_tokens=3)

@@ -1,0 +1,398 @@
+{
+  "basics": {
+    "name": "林晓舟",
+    "gender": "男",
+    "birthday": "1999-08-12",
+    "email": "xiaozhou.lin.demo@example.com",
+    "phone": "13800001234",
+    "location": "上海",
+    "wechat": "linxz_demo",
+    "political_status": "共青团员",
+    "photo_data_url": "",
+    "target_role": {
+      "value": "后端开发工程师 / 平台研发",
+      "source_fact_ids": [],
+      "origin": "manual",
+      "confidence": 1
+    },
+    "summary": {
+      "value": "计算机硕士，3 年后端与平台经验。熟悉 Python/Go 微服务、PostgreSQL/Redis、Kubernetes 与可观测性建设；曾主导订单检索与消息可靠投递改造，支撑日均千万级调用。希望继续在高并发业务与研发效能方向深耕。",
+      "source_fact_ids": [],
+      "origin": "manual",
+      "confidence": 1
+    }
+  },
+  "education": [
+    {
+      "id": "edu-sjtu-ms",
+      "institution": "上海交通大学",
+      "degree": "硕士",
+      "field": "计算机科学与技术",
+      "start_date": "2021-09",
+      "end_date": "2024-03",
+      "highlights": [
+        {
+          "value": "研究方向：分布式系统与数据密集型应用；GPA 3.7/4.0",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "硕士课题：基于一致性哈希的多租户缓存路由，模拟实验下热点迁移延迟下降 38%",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "edu-zju-bs",
+      "institution": "浙江大学",
+      "degree": "本科",
+      "field": "软件工程",
+      "start_date": "2017-09",
+      "end_date": "2021-06",
+      "highlights": [
+        {
+          "value": "主修操作系统、计算机网络、数据库系统；校级优秀毕业生",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "ACM 校队成员，区域赛铜奖；担任院学生会技术部副部长",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "work_experience": [
+    {
+      "id": "work-aurora",
+      "company": "极光云科技有限公司",
+      "title": "后端开发工程师",
+      "start_date": "2024-04",
+      "end_date": "至今",
+      "bullets": [
+        {
+          "value": "负责交易检索与订单中心核心接口，日均 QPS 峰值约 1.2 万；将 P99 从 420ms 优化到 180ms",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "推动 PostgreSQL 分区表与只读副本路由，大促期间慢查询告警下降约 70%",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "落地 OpenTelemetry + Grafana 看板，覆盖关键路径与依赖健康度，故障定位平均缩短 25 分钟",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "参与 Code Review 与 On-call，整理 12 份故障复盘；牵头接入限流与熔断策略",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "work-northstar-intern",
+      "company": "北辰数据股份有限公司",
+      "title": "后端开发实习生",
+      "start_date": "2023-06",
+      "end_date": "2023-12",
+      "bullets": [
+        {
+          "value": "用 FastAPI 搭建内部数据标注任务服务，支持任务分发、进度回写与权限校验",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "引入 Celery + Redis 异步队列，高峰期任务积压从小时级降到 10 分钟内消化",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "编写 pytest 覆盖核心状态机，合并前 CI 失败率从约 18% 降到 5% 以下",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "work-campus-lab",
+      "company": "浙江大学网络与系统实验室",
+      "title": "科研助理（兼职）",
+      "start_date": "2020-03",
+      "end_date": "2021-05",
+      "bullets": [
+        {
+          "value": "维护实验集群监控脚本，自动采集节点 CPU/内存与磁盘水位并推送钉钉告警",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "协助整理开源实验代码与 README，支撑两篇实验室内部技术报告",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-msg-reliably",
+      "name": "可靠消息投递平台",
+      "role": "后端负责人",
+      "start_date": "2024-07",
+      "end_date": "2025-02",
+      "bullets": [
+        {
+          "value": "设计 Outbox + 幂等消费方案，对接 Kafka，端到端重复投递率降至 0.01% 以下",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "实现死信队列与人工重放控制台，业务方自助重试替代 80% 的工单",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "技术栈：Go、Kafka、PostgreSQL、Redis、Kubernetes",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "proj-resume-insight",
+      "name": "校招简历解析与匹配原型",
+      "role": "全栈开发",
+      "start_date": "2022-10",
+      "end_date": "2023-03",
+      "bullets": [
+        {
+          "value": "基于规则 + 轻量模型抽取教育/实习字段，人工抽检准确率约 91%",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "用 React + FastAPI 做演示台，支持 JD 粘贴、匹配矩阵与导出 Markdown",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "proj-campus-im",
+      "name": "二手交易即时通讯服务",
+      "role": "核心开发",
+      "start_date": "2019-09",
+      "end_date": "2020-06",
+      "bullets": [
+        {
+          "value": "实现 WebSocket 会话、已读回执与图片消息；峰值同时在线约 800 人",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "完成敏感词过滤与举报工单流转，支撑运营侧人工审核闭环",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "proj-k8s-cost",
+      "name": "K8s 成本可见性小工具",
+      "role": "个人项目",
+      "start_date": "2025-03",
+      "end_date": "2025-06",
+      "bullets": [
+        {
+          "value": "聚合 namespace CPU/内存 request 与实际用量，输出周报 CSV 与异常 TopN",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "开源演示仓库获约 120 star（虚构数据，仅供冒烟）",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "id": "skill-lang",
+      "name": "编程语言",
+      "items": [
+        { "value": "Python", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "Go", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "TypeScript（可读可改）", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "SQL", "source_fact_ids": [], "origin": "manual", "confidence": 1 }
+      ]
+    },
+    {
+      "id": "skill-backend",
+      "name": "后端与中间件",
+      "items": [
+        { "value": "FastAPI / Flask", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "PostgreSQL / MySQL", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "Redis / Kafka", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "gRPC / REST", "source_fact_ids": [], "origin": "manual", "confidence": 1 }
+      ]
+    },
+    {
+      "id": "skill-infra",
+      "name": "工程与基础设施",
+      "items": [
+        { "value": "Docker / Kubernetes", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "CI（GitHub Actions / GitLab CI）", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "OpenTelemetry / Grafana / Prometheus", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "Linux 排障与性能剖析基础", "source_fact_ids": [], "origin": "manual", "confidence": 1 }
+      ]
+    },
+    {
+      "id": "skill-soft",
+      "name": "协作与其他",
+      "items": [
+        { "value": "中英文技术文档撰写", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "跨团队需求澄清与方案评审", "source_fact_ids": [], "origin": "manual", "confidence": 1 },
+        { "value": "英语：CET-6，可阅读英文文档与会议纪要", "source_fact_ids": [], "origin": "manual", "confidence": 1 }
+      ]
+    }
+  ],
+  "certificates": [
+    {
+      "id": "cert-aws-saa",
+      "name": "AWS Certified Solutions Architect – Associate（虚构）",
+      "detail": {
+        "value": "用于冒烟展示证书区块，非真实持证",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2024-11"
+    },
+    {
+      "id": "cert-cet6",
+      "name": "大学英语六级",
+      "detail": {
+        "value": "成绩 512",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2020-06"
+    }
+  ],
+  "awards": [
+    {
+      "id": "award-acm",
+      "name": "ACM-ICPC 区域赛铜奖",
+      "detail": {
+        "value": "2019 区域赛",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2019-11"
+    },
+    {
+      "id": "award-grad",
+      "name": "校级优秀毕业生",
+      "detail": {
+        "value": "浙江大学本科",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2021-06"
+    },
+    {
+      "id": "award-hackathon",
+      "name": "校内黑客马拉松二等奖",
+      "detail": {
+        "value": "项目：校园二手交易即时通讯",
+        "source_fact_ids": [],
+        "origin": "manual",
+        "confidence": 1
+      },
+      "date": "2020-05"
+    }
+  ],
+  "custom_sections": [
+    {
+      "id": "custom-opensource",
+      "title": "开源与分享",
+      "items": [
+        {
+          "value": "维护个人技术博客，累计约 40 篇后端/可观测性笔记（虚构）",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        },
+        {
+          "value": "在团队内部分享《Kafka 幂等消费实践》与《慢查询治理清单》",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "custom-interests",
+      "title": "兴趣与补充",
+      "items": [
+        {
+          "value": "喜欢用火焰图排查性能问题；业余研究本地优先工具与简历排版",
+          "source_fact_ids": [],
+          "origin": "manual",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "section_order": [
+    "basics",
+    "education",
+    "skills",
+    "work_experience",
+    "projects",
+    "certificates",
+    "awards",
+    "custom_sections"
+  ],
+  "layout_profile": {
+    "source_kind": "builtin",
+    "font_family": "",
+    "heading_font_family": "",
+    "accent_color": "",
+    "base_font_size": null,
+    "line_height": null,
+    "columns": 1,
+    "imported": false
+  }
+}

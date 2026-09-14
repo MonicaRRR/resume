@@ -93,9 +93,33 @@ async def generate_followup_questions(
     analysis: JobAnalysis,
     resume: ResumeDocument,
     facts: list[Fact],
+    application_type: ApplicationType = "experienced",
 ) -> list[FollowupQuestion]:
     inventory = _experience_inventory(resume)
     thin_projects = inventory["project_count"] <= 2
+    campus_like = application_type in {"campus", "internship"}
+    if campus_like:
+        guidance_hint = (
+            "guidance 用 2–4 条短提示帮助回忆（课程设计、实验室、比赛、个人工具、开源贡献、助研等），"
+            "写成可勾选的线索，不要编造用户做过"
+        )
+        thin_hint = (
+            "当前项目经历偏少：至少一半问题应询问是否还有与 JD 关键词相关的项目/课程/比赛经历，"
+            "并在 guidance 里给出具体回忆方向"
+            if thin_projects
+            else "若某条 JD 要求缺少项目证据，可追问是否有对应项目或可迁移经历"
+        )
+    else:
+        guidance_hint = (
+            "guidance 用 2–4 条短提示帮助回忆（工作专项、跨团队推进、故障复盘、性能治理、内部平台、"
+            "开源/个人工具等），写成可勾选的线索；社招不要引导课程设计、课设、竞赛、黑客松、数学建模"
+        )
+        thin_hint = (
+            "当前项目经历偏少：至少一半问题应询问是否还有与 JD 相关的工作项目或可迁移业务/技术专项，"
+            "并在 guidance 里给出具体回忆方向；禁止提示课程设计或竞赛"
+            if thin_projects
+            else "若某条 JD 要求缺少项目证据，可追问是否有对应工作项目或可迁移专项；禁止提示课程设计或竞赛"
+        )
     prompt = _prompt(
         task="根据证据缺口生成简短追问",
         constraints=[
@@ -104,12 +128,8 @@ async def generate_followup_questions(
             "优先询问职责边界、方法、规模和可量化结果",
             "把追问当作与用户的讨论：说明为何与当前 JD 相关",
             "每个问题均可跳过",
-            "guidance 用 2–4 条短提示帮助回忆（课程设计、实验室、比赛、个人工具、开源贡献、助研等），写成可勾选的线索，不要编造用户做过",
-            (
-                "当前项目经历偏少：至少一半问题应询问是否还有与 JD 关键词相关的项目/课程/比赛经历，并在 guidance 里给出具体回忆方向"
-                if thin_projects
-                else "若某条 JD 要求缺少项目证据，可追问是否有对应项目或可迁移经历"
-            ),
+            guidance_hint,
+            thin_hint,
         ],
         data={
             "job_analysis": analysis.model_dump(mode="json"),
@@ -117,6 +137,7 @@ async def generate_followup_questions(
             "experience_inventory": inventory,
             "facts": [fact.model_dump(mode="json") for fact in facts],
             "project_coverage": "thin" if thin_projects else "ok",
+            "application_type": application_type,
         },
     )
     response = await _complete_with_repair(provider, prompt, QuestionList)
@@ -137,7 +158,7 @@ async def generate_followup_questions(
         if len(result) == 5:
             break
     if thin_projects and not any("项目" in item.topic or "项目" in item.question for item in result):
-        result = [_default_project_followup(analysis, resume), *result][:5]
+        result = [_default_project_followup(analysis, resume, application_type), *result][:5]
     return result
 
 
@@ -160,6 +181,18 @@ async def suggest_resume_patch(
     ]
     style_guides = style_guides_for_prompt(select_style_guides(analysis, application_type, limit=4))
     inventory = _experience_inventory(resume)
+    campus_like = application_type in {"campus", "internship"}
+    if campus_like:
+        ask_constraints = [
+            "若 experience_inventory.project_count ≤ 2，或相对 JD 明显缺项目证据：必须在 experience_asks 里给出 1–2 条追问，询问用户是否还有相关项目/课程设计/比赛/个人工具",
+            "experience_asks.question 用口语直接问；guidance 给 2–4 条回忆引导（点名 JD 关键词，提示课程大作业、实验室、黑客松、开源、助研、实习边角项目等），不得断言用户一定做过",
+        ]
+    else:
+        ask_constraints = [
+            "若 experience_inventory.project_count ≤ 2，或相对 JD 明显缺项目证据：必须在 experience_asks 里给出 1–2 条追问，询问是否还有相关工作项目、业务专项或可迁移技术成果",
+            "experience_asks.question 用口语直接问；guidance 给 2–4 条回忆引导（点名 JD 关键词，提示上一份工作未单列的模块、跨团队推进、故障复盘、性能治理、内部平台、开源/个人工具等）",
+            "社招禁止在 experience_asks / guidance 中引导课程设计、课设、毕设、竞赛、黑客松、数学建模等校园向经历",
+        ]
     prompt = _prompt(
         task="基于用户经历素材库，生成面向当前 JD 的简历适配建议（待用户逐项同意）",
         constraints=[
@@ -199,8 +232,7 @@ async def suggest_resume_patch(
             "不要对同一段经历给出多条同义改写；若只需润色一次，合并为一条",
             "before 与 after 文本实质相同的无效建议不要输出",
             "建议数量通常 6–12 条：首轮应覆盖技能/实习/项目等有内容章节的实质适配，不要因「精炼」只给两三条；仍禁止同义重复与空操作",
-            "若 experience_inventory.project_count ≤ 2，或相对 JD 明显缺项目证据：必须在 experience_asks 里给出 1–2 条追问，询问用户是否还有相关项目/课程设计/比赛/个人工具",
-            "experience_asks.question 用口语直接问；guidance 给 2–4 条回忆引导（点名 JD 关键词，提示课程大作业、实验室、黑客松、开源、助研、实习边角项目等），不得断言用户一定做过",
+            *ask_constraints,
             "experience_asks 不算改稿：不要把虚构项目写进 operations；只提问帮助用户补充素材",
             "不要修改姓名、性别、生日、电话、邮箱、微信、政治面貌或证件照",
             "不要自动应用任何修改——输出仅供用户审阅勾选",
@@ -214,6 +246,7 @@ async def suggest_resume_patch(
             "allowed_fact_ids": [fact.id for fact in facts],
             "fact_catalog": fact_catalog,
             "project_coverage": "thin" if inventory["project_count"] <= 2 else "ok",
+            "application_type": application_type,
             "allowed_patch_roots": sorted(
                 [
                     "basics",
@@ -232,7 +265,12 @@ async def suggest_resume_patch(
     )
     patch = await _complete_with_repair(provider, prompt, ResumePatch)
     grounded = _ground_patch_operations(patch, resume=resume, facts=facts)
-    return _ensure_experience_asks(grounded, resume=resume, analysis=analysis)
+    return _ensure_experience_asks(
+        grounded,
+        resume=resume,
+        analysis=analysis,
+        application_type=application_type,
+    )
 
 
 def _experience_inventory(resume: ResumeDocument) -> dict:
@@ -407,6 +445,7 @@ def _ensure_experience_asks(
     *,
     resume: ResumeDocument,
     analysis: JobAnalysis,
+    application_type: ApplicationType = "experienced",
 ) -> ResumePatch:
     if len(resume.projects) > 2 and patch.experience_asks:
         return patch
@@ -425,7 +464,9 @@ def _ensure_experience_asks(
         ][:2]
         if cleaned:
             return patch.model_copy(update={"experience_asks": cleaned})
-    return patch.model_copy(update={"experience_asks": [_default_project_ask(analysis, resume)]})
+    return patch.model_copy(
+        update={"experience_asks": [_default_project_ask(analysis, resume, application_type)]}
+    )
 
 
 def _jd_keyword_hints(analysis: JobAnalysis, *, limit: int = 5) -> list[str]:
@@ -441,31 +482,54 @@ def _jd_keyword_hints(analysis: JobAnalysis, *, limit: int = 5) -> list[str]:
     return hints or [analysis.role_title or "目标岗位"]
 
 
-def _default_project_ask(analysis: JobAnalysis, resume: ResumeDocument) -> ExperienceAsk:
+def _default_project_ask(
+    analysis: JobAnalysis,
+    resume: ResumeDocument,
+    application_type: ApplicationType = "experienced",
+) -> ExperienceAsk:
     keywords = _jd_keyword_hints(analysis)
     joined = "、".join(keywords[:4])
     existing = "、".join(item.name for item in resume.projects if item.name.strip()) or "（当前几乎没有项目条目）"
-    guidance = "\n".join(
-        [
-            f"· 课程大作业 / 毕设里有没有用到 {joined}？",
-            f"· 实验室、助研、比赛（黑客松/数学建模/创新创业）是否做过相关原型？",
-            f"· 个人工具、脚本、开源贡献、兴趣项目里有没有能对应 JD 的？",
-            f"· 实习中未单独成段、但可拆出来写的小模块？",
-        ]
-    )
-    return ExperienceAsk(
-        question=(
+    if application_type in {"campus", "internship"}:
+        guidance = "\n".join(
+            [
+                f"· 课程大作业 / 毕设里有没有用到 {joined}？",
+                f"· 实验室、助研、比赛（黑客松/数学建模/创新创业）是否做过相关原型？",
+                f"· 个人工具、脚本、开源贡献、兴趣项目里有没有能对应 JD 的？",
+                f"· 实习中未单独成段、但可拆出来写的小模块？",
+            ]
+        )
+        question = (
             f"现在项目经历偏少（已有：{existing}）。你是否还有与「{joined}」相关的项目、课程或比赛经历，"
             "愿意补充进素材库？"
-        ),
+        )
+    else:
+        guidance = "\n".join(
+            [
+                f"· 上一份工作里有没有未单独成段、但可对齐「{joined}」的模块或专项？",
+                f"· 跨团队推进、故障复盘、性能/稳定性治理等成果能否拆出来写？",
+                f"· 内部平台、中台建设、技术债治理类经历？",
+                f"· 个人工具、开源贡献里有没有能对应 JD 的？（不要写课程设计或竞赛）",
+            ]
+        )
+        question = (
+            f"现在项目经历偏少（已有：{existing}）。你是否还有与「{joined}」相关的工作项目或可迁移业务/技术专项，"
+            "愿意补充进素材库？"
+        )
+    return ExperienceAsk(
+        question=question,
         guidance=guidance,
         topic="相关项目补充",
         jd_keywords=keywords,
     )
 
 
-def _default_project_followup(analysis: JobAnalysis, resume: ResumeDocument) -> FollowupQuestion:
-    ask = _default_project_ask(analysis, resume)
+def _default_project_followup(
+    analysis: JobAnalysis,
+    resume: ResumeDocument,
+    application_type: ApplicationType = "experienced",
+) -> FollowupQuestion:
+    ask = _default_project_ask(analysis, resume, application_type)
     return FollowupQuestion(
         question=ask.question,
         topic=ask.topic,
@@ -736,6 +800,7 @@ def _safe_resume(resume: ResumeDocument) -> dict:
     payload["basics"]["email"] = ""
     payload["basics"]["phone"] = ""
     payload["basics"]["wechat"] = ""
+    payload["basics"]["location"] = ""
     if payload["basics"].get("photo_data_url"):
         payload["basics"]["photo_data_url"] = "[已上传证件照]"
     return payload
