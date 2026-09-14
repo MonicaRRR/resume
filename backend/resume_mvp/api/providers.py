@@ -33,6 +33,9 @@ class ProviderSettingsOutput(BaseModel):
     temperature: float
     configured: bool
     codex_confirmed: bool
+    key_storage: str
+    key_saved: bool
+    storage_warning: str
 
 
 class ProviderSelection(BaseModel):
@@ -111,6 +114,15 @@ def update_provider_settings(
         raise ProviderConfigurationError("PROVIDER_KIND_INVALID", "不支持该模型类型")
     except ProviderConfigurationError as error:
         raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error
+
+
+@router.delete("/key", response_model=ProviderSettingsOutput)
+def delete_provider_key(services: AppServices = Depends(get_services)) -> ProviderPublicState:
+    try:
+        return services.providers.delete_openai_key()
+    except ProviderConfigurationError as error:
+        status = 503 if error.code == "KEYCHAIN_UNAVAILABLE" else 422
+        raise HTTPException(status, detail={"code": error.code, "message": str(error)}) from error
 
 
 @router.post("/test", response_model=ProviderProbe)

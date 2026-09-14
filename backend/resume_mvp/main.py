@@ -16,12 +16,14 @@ from resume_mvp.provider_store import PROVIDER_SETTINGS_FILE
 from resume_mvp.providers import AIProvider
 from resume_mvp.providers.e2e import E2EProvider
 from resume_mvp.repositories import ProjectRepository
+from resume_mvp.secret_store import SecretStore, create_platform_secret_store
 
 
 def create_app(
     *,
     data_dir: Path | None = None,
     test_providers: Mapping[str, AIProvider] | None = None,
+    secret_store: SecretStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="中文 AI 简历工作台", version="0.1.0")
     root = data_dir or settings.data_dir
@@ -39,6 +41,7 @@ def create_app(
             providers,
             default_test_kind=default_test_kind,
             persist_path=None if default_test_kind else root / PROVIDER_SETTINGS_FILE,
+            secret_store=secret_store if secret_store is not None else create_platform_secret_store(),
         ),
     )
 

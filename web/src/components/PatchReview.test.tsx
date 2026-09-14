@@ -8,6 +8,7 @@ import { PatchReview } from "./PatchReview";
 
 
 const patch: ResumePatch = {
+  experience_asks: [],
   operations: [
     {
       id: "op-summary",

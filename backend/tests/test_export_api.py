@@ -5,6 +5,7 @@ from docx import Document
 from fastapi.testclient import TestClient
 
 from resume_mvp.main import create_app
+from resume_mvp.providers.e2e import E2EProvider
 
 
 def _seed_profile(client: TestClient) -> None:
@@ -64,7 +65,7 @@ def create_project_with_resume(client: TestClient) -> str:
 
 def test_export_routes_return_reopenable_files_and_handoff(tmp_path: Path) -> None:
     """Catches attachment routes returning the wrong version or media type."""
-    client = TestClient(create_app(data_dir=tmp_path))
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
     project_id = create_project_with_resume(client)
 
     docx_response = client.post(f"/api/projects/{project_id}/export/docx")
@@ -87,7 +88,7 @@ def test_export_routes_return_reopenable_files_and_handoff(tmp_path: Path) -> No
 
 def test_campus_docx_export_allowed_when_content_exceeds_one_page(tmp_path: Path) -> None:
     """Campus overflow is a soft warning; export must still succeed."""
-    client = TestClient(create_app(data_dir=tmp_path))
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
     _seed_profile(client)
     project = client.post(
         "/api/projects",
@@ -114,7 +115,7 @@ def test_campus_docx_export_allowed_when_content_exceeds_one_page(tmp_path: Path
 
 def test_docx_export_uses_live_draft_basics(tmp_path: Path) -> None:
     """Catches Word export ignoring birthday/gender from the current editor draft."""
-    client = TestClient(create_app(data_dir=tmp_path))
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": E2EProvider()}))
     project_id = create_project_with_resume(client)
     version = client.get(f"/api/projects/{project_id}/versions").json()[0]
     resume = version["resume"]

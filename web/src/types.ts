@@ -142,6 +142,9 @@ export const FollowupQuestionSchema = z.object({
 export const ProviderSettingsSchema = z.object({
   kind: z.string(), base_url: z.string(), model: z.string(), timeout: z.number(), temperature: z.number(),
   configured: z.boolean(), codex_confirmed: z.boolean(),
+  key_storage: z.enum(["none", "memory", "keychain"]).default("none"),
+  key_saved: z.boolean().default(false),
+  storage_warning: z.string().optional(),
 });
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
 

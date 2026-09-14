@@ -14,6 +14,8 @@ const DEFAULTS: ProviderSettings = {
   temperature: 0.2,
   configured: false,
   codex_confirmed: false,
+  key_storage: "none",
+  key_saved: false,
 };
 
 
@@ -74,13 +76,35 @@ export function SettingsPage() {
     setMessage("");
     try {
       const saved = await api.saveProviderSettings({ ...settings, kind: "openai-compatible", api_key: transientKey });
-      await api.testProvider("openai-compatible");
       setSettings(saved);
       syncProviderCache(saved);
-      setMessage("API 连接测试成功。密钥仅保存在后端进程内存中，重启后需重新输入。");
+      await api.testProvider("openai-compatible");
+      if (saved.key_storage === "keychain") {
+        setMessage("API 连接测试成功，API Key 已安全保存在 macOS 钥匙串。");
+      } else {
+        setMessage("API 连接测试成功。");
+        setError("无法写入 macOS 钥匙串；密钥本次仅保存在内存，重启后需重新输入。");
+      }
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "连接测试失败，请检查地址、模型与密钥");
       await queryClient.invalidateQueries({ queryKey: ["provider-settings"] });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteApiKey() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await api.deleteProviderKey();
+      setApiKey("");
+      setSettings(saved);
+      syncProviderCache(saved);
+      setMessage("已从 macOS 钥匙串删除 API Key。");
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "删除 API Key 失败，请稍后重试");
     } finally {
       setBusy(false);
     }
@@ -191,10 +215,20 @@ export function SettingsPage() {
           <header><span>01 / API</span><div className="provider-icon">↗</div><h2>OpenAI 兼容 API</h2><p>适用于 OpenAI、兼容网关与提供相同 Chat Completions 协议的服务。</p></header>
           <label>Base URL<input required type="url" value={settings.base_url} onChange={(event) => setSettings({ ...settings, base_url: event.target.value })} /></label>
           <label>模型名称<input required value={settings.model} placeholder="例如 gpt-5-mini" onChange={(event) => setSettings({ ...settings, model: event.target.value })} /></label>
-          <label>API Key<input required type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} /></label>
+          <label>API Key<input type="password" autoComplete="off" value={apiKey} placeholder="首次使用请填写；留空读取此地址的密钥" onChange={(event) => setApiKey(event.target.value)} /></label>
           <div className="provider-row"><label>超时（秒）<input type="number" min="5" max="600" value={settings.timeout} onChange={(event) => setSettings({ ...settings, timeout: Number(event.target.value) })} /></label><label>Temperature<input type="number" min="0" max="2" step="0.1" value={settings.temperature} onChange={(event) => setSettings({ ...settings, temperature: Number(event.target.value) })} /></label></div>
-          <p className="privacy-note">密钥不会写入浏览器存储、数据库、日志或导出文件；重启后需重新输入密钥。</p>
+          <p className="privacy-note">
+            {settings.key_storage === "keychain"
+              ? "API Key 已安全保存在 macOS 钥匙串；留空可继续使用，填写新值会替换。"
+              : settings.key_storage === "memory"
+                ? "钥匙串写入失败，密钥目前仅在内存中；重启后需重新输入。"
+                : "密钥不会写入浏览器存储、数据库、日志或导出文件；保存后将进入 macOS 钥匙串。"}
+          </p>
+          {settings.storage_warning && <p className="privacy-note" role="alert">{settings.storage_warning}</p>}
           <button className="primary-button" disabled={busy}>{busy ? "正在测试…" : "保存并测试连接"}</button>
+          {settings.key_saved || settings.key_storage === "memory" || settings.storage_warning ? (
+            <button type="button" className="secondary-button" disabled={busy} onClick={deleteApiKey}>删除已保存密钥</button>
+          ) : null}
         </form>
 
         <form className={`provider-card codex-card ${alreadyEnabled ? "connected" : ""}`} onSubmit={saveCodex}>

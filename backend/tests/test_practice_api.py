@@ -10,6 +10,8 @@ from resume_mvp.domain import (
     PracticeQuestion,
 )
 from resume_mvp.main import create_app
+from resume_mvp.providers.e2e import E2EProvider
+from tests.test_export_api import _seed_profile
 
 
 class ApiPracticeProvider:
@@ -30,7 +32,7 @@ class ApiPracticeProvider:
                     summary="继续补充实例",
                 )
             )
-        return schema.model_validate({"items": []})
+        return await E2EProvider().complete_json(prompt, schema)
 
 
 def test_practice_session_is_saved_across_answer_roundtrip(tmp_path: Path) -> None:
@@ -38,6 +40,7 @@ def test_practice_session_is_saved_across_answer_roundtrip(tmp_path: Path) -> No
     client = TestClient(
         create_app(data_dir=tmp_path, test_providers={"test": ApiPracticeProvider()})
     )
+    _seed_profile(client)
     project = client.post(
         "/api/projects",
         json={

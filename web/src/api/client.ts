@@ -92,6 +92,7 @@ export const api = {
   ),
   getProviderSettings: () => request("/api/settings/providers", ProviderSettingsSchema),
   saveProviderSettings: (input: Record<string, unknown>) => request("/api/settings/providers", ProviderSettingsSchema, json("PATCH", input)),
+  deleteProviderKey: () => request("/api/settings/providers/key", ProviderSettingsSchema, { method: "DELETE" }),
   testProvider: (provider: string) => request("/api/settings/providers/test", z.object({ status: z.string() }), json("POST", { provider })),
   detectCodex: () => request("/api/settings/providers/codex/detect", CodexDetectSchema, { method: "POST" }),
   getProfile: () => request("/api/profile", z.object({

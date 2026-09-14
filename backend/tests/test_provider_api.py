@@ -14,9 +14,36 @@ class RateLimitedProvider:
         raise ProviderRateLimitError("1309 Coding Plan 套餐已到期", retry_after_seconds=2)
 
 
+class FakeSecretStore:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def get(self, account: str) -> str | None:
+        return self.values.get(account)
+
+    def set(self, account: str, secret: str) -> None:
+        self.values[account] = secret
+
+    def delete(self, account: str) -> None:
+        self.values.pop(account, None)
+
+
+class FailingSecretStore(FakeSecretStore):
+    def set(self, account: str, secret: str) -> None:
+        raise RuntimeError("keychain unavailable")
+
+
+def test_provider_state_reports_secret_storage(tmp_path: Path) -> None:
+    """Catches clients being unable to distinguish Keychain, memory, and no secret."""
+    state = TestClient(create_app(data_dir=tmp_path)).get("/api/settings/providers").json()
+
+    assert state["key_storage"] == "none"
+    assert state["key_saved"] is False
+
+
 def test_provider_settings_never_echo_api_key(tmp_path: Path) -> None:
     """Catches API secrets leaking through write or read responses."""
-    client = TestClient(create_app(data_dir=tmp_path))
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=FakeSecretStore()))
 
     response = client.patch(
         "/api/settings/providers",
@@ -96,8 +123,9 @@ def test_codex_settings_persist_across_restarts(tmp_path: Path) -> None:
     assert "api_key" not in state
 
 
-def test_openai_metadata_persists_but_key_does_not(tmp_path: Path) -> None:
-    first = TestClient(create_app(data_dir=tmp_path))
+def test_openai_key_restores_from_secret_store_without_plaintext_file(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    first = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
     assert first.patch(
         "/api/settings/providers",
         json={
@@ -110,13 +138,145 @@ def test_openai_metadata_persists_but_key_does_not(tmp_path: Path) -> None:
         },
     ).status_code == 200
 
-    restarted = TestClient(create_app(data_dir=tmp_path))
+    restarted = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
     state = restarted.get("/api/settings/providers").json()
     assert state["base_url"] == "http://localhost:9999/v1"
     assert state["model"] == "demo"
-    assert state["configured"] is False
+    assert state["configured"] is True
+    assert state["key_storage"] == "keychain"
+    assert state["key_saved"] is True
     saved = (tmp_path / "provider_settings.json").read_text(encoding="utf-8")
     assert "top-secret" not in saved
+
+
+def test_api_keys_are_isolated_by_base_url(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
+    payload = {
+        "kind": "openai-compatible",
+        "base_url": "https://first.example/v1",
+        "model": "demo",
+        "api_key": "first-secret",
+    }
+    assert client.patch("/api/settings/providers", json=payload).status_code == 200
+
+    switched = client.patch(
+        "/api/settings/providers",
+        json={**payload, "base_url": "https://second.example/v1", "api_key": ""},
+    )
+
+    assert switched.status_code == 422
+    assert switched.json()["detail"]["code"] == "PROVIDER_API_KEY_REQUIRED"
+
+
+def test_rejects_invalid_base_url_before_saving_secret(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
+
+    response = client.patch(
+        "/api/settings/providers",
+        json={
+            "kind": "openai-compatible",
+            "base_url": "not-a-url",
+            "model": "demo",
+            "api_key": "top-secret",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "PROVIDER_BASE_URL_INVALID"
+    assert secrets.values == {}
+
+
+def test_blank_key_reuses_host_secret_after_switching_back(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    app = create_app(data_dir=tmp_path, secret_store=secrets)
+    client = TestClient(app)
+    payload = {"kind": "openai-compatible", "model": "demo"}
+    for host in ("first", "second"):
+        assert client.patch("/api/settings/providers", json={
+            **payload, "base_url": f"https://{host}.example/v1", "api_key": f"{host}-secret",
+        }).status_code == 200
+    response = client.patch("/api/settings/providers", json={
+        **payload, "base_url": "https://first.example:443/v2", "api_key": "",
+    })
+    assert response.status_code == 200
+    assert response.json()["key_saved"] is True
+    assert app.state.services.providers.resolve("openai-compatible").api_key == "first-secret"
+
+
+def test_keychain_delete_failure_does_not_claim_success(tmp_path: Path) -> None:
+    class DeniedDeleteStore(FakeSecretStore):
+        def delete(self, account: str) -> None:
+            raise RuntimeError("denied")
+
+    secrets = DeniedDeleteStore()
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
+    client.patch("/api/settings/providers", json={
+        "kind": "openai-compatible", "model": "demo", "base_url": "https://api.example", "api_key": "top-secret",
+    })
+    response = client.delete("/api/settings/providers/key")
+    assert response.status_code == 503
+    assert "top-secret" not in response.text
+    assert client.get("/api/settings/providers").json()["key_saved"] is True
+
+
+def test_keychain_read_failure_reports_warning_after_restart(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
+    client.patch("/api/settings/providers", json={
+        "kind": "openai-compatible", "model": "demo", "base_url": "https://api.example", "api_key": "top-secret",
+    })
+
+    class LockedStore(FakeSecretStore):
+        def get(self, account: str) -> str | None:
+            raise RuntimeError("locked")
+
+    restarted = TestClient(create_app(data_dir=tmp_path, secret_store=LockedStore()))
+    state = restarted.get("/api/settings/providers").json()
+    assert state["configured"] is False
+    assert "恢复密钥" in state["storage_warning"]
+
+
+def test_delete_saved_api_key_disables_provider(tmp_path: Path) -> None:
+    secrets = FakeSecretStore()
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=secrets))
+    client.patch(
+        "/api/settings/providers",
+        json={
+            "kind": "openai-compatible",
+            "base_url": "https://api.example/v1",
+            "model": "demo",
+            "api_key": "top-secret",
+        },
+    )
+
+    response = client.delete("/api/settings/providers/key")
+
+    assert response.status_code == 200
+    assert response.json()["configured"] is False
+    assert response.json()["key_storage"] == "none"
+    assert secrets.values == {}
+
+
+def test_keychain_failure_keeps_key_in_memory_with_warning_state(tmp_path: Path) -> None:
+    client = TestClient(create_app(data_dir=tmp_path, secret_store=FailingSecretStore()))
+
+    response = client.patch(
+        "/api/settings/providers",
+        json={
+            "kind": "openai-compatible",
+            "base_url": "https://api.example/v1",
+            "model": "demo",
+            "api_key": "top-secret",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["configured"] is True
+    assert response.json()["key_storage"] == "memory"
+    assert response.json()["key_saved"] is False
+    assert "top-secret" not in response.text
 
 
 def test_codex_requires_explicit_privacy_confirmation(tmp_path: Path) -> None:
