@@ -13,7 +13,6 @@ vi.mock("./ResumePreview", () => ({
 
 
 const patch: ResumePatch = {
-  experience_asks: [],
   operations: [
     {
       id: "op-summary",
