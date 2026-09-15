@@ -35,6 +35,15 @@ def test_count_pdf_pages() -> None:
     assert count_pdf_pages(_tiny_pdf(3)) == 3
 
 
+def test_export_latex_returns_utf8_source(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    project_id = create_project_with_resume(client)
+    response = client.post(f"/api/projects/{project_id}/export/latex", json={})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-tex")
+    assert response.content.startswith(b"% resume-evidence-workbench")
+
+
 def test_preview_pdf_endpoint_returns_pdf_and_page_count(tmp_path: Path, monkeypatch) -> None:
     client = _client(tmp_path)
     project_id = create_project_with_resume(client)

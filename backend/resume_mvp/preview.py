@@ -64,6 +64,33 @@ def convert_docx_to_pdf(docx_bytes: bytes, *, timeout: float = 90) -> bytes:
         return pdf_path.read_bytes()
 
 
+def compile_latex_to_pdf(source_text: str, *, timeout: float = 90) -> bytes:
+    """Compile UTF-8 XeLaTeX source in an isolated temporary directory."""
+    if not source_text.strip():
+        raise PreviewConversionError("LaTeX 内容为空")
+    from shutil import which
+
+    binary = which("xelatex") or which("tectonic")
+    if binary is None:
+        raise PreviewConversionError("未找到 XeLaTeX 编译器，已切换浏览器预览")
+    with TemporaryDirectory(prefix="resume-latex-") as directory:
+        root = Path(directory)
+        source = root / "resume.tex"
+        source.write_text(source_text, encoding="utf-8")
+        command = [binary, "-interaction=nonstopmode", "-halt-on-error", source.name]
+        if Path(binary).name == "tectonic":
+            command = [binary, "--untrusted", source.name]
+        try:
+            completed = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            raise PreviewConversionError("LaTeX PDF 生成超时，请稍后重试") from error
+        pdf_path = root / "resume.pdf"
+        if not pdf_path.exists():
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise PreviewConversionError(f"LaTeX 未能生成 PDF{('：' + detail[:200]) if detail else ''}")
+        return pdf_path.read_bytes()
+
+
 def count_pdf_pages(pdf_bytes: bytes) -> int:
     return pdf_page_count(pdf_bytes)
 

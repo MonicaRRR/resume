@@ -9,9 +9,11 @@ from pydantic import BaseModel, Field
 from resume_mvp.api.dependencies import AppServices, get_services
 from resume_mvp.domain import JobProject, ResumeDocument, ResumeVersion
 from resume_mvp.exports import build_codex_handoff, build_docx, build_resume_json
+from resume_mvp.latex import build_latex
 from resume_mvp.preview import (
     PreviewConversionError,
     convert_docx_to_pdf,
+    compile_latex_to_pdf,
     count_pdf_pages,
     render_pdf_page_pngs,
 )
@@ -33,6 +35,14 @@ class PreviewPdfInput(BaseModel):
 class ExportDocxInput(BaseModel):
     resume: ResumeDocument | None = None
     template_id: str | None = None
+
+
+@router.post("/{project_id}/export/latex")
+def export_latex(project_id: str, body: ExportDocxInput = Body(default_factory=ExportDocxInput), services: AppServices = Depends(get_services)) -> Response:
+    project, version = _active(services, project_id)
+    resume = body.resume or version.resume
+    source = build_latex(resume, body.template_id or project.selected_template_id, project.application_type)
+    return Response(source.encode("utf-8"), media_type="application/x-tex; charset=utf-8", headers={"Content-Disposition": _attachment(f"{project.title}.tex")})
 
 
 class PreviewPagesResponse(BaseModel):
@@ -141,8 +151,16 @@ def _build_preview_pdf(
     resume: ResumeDocument,
     template_id: str,
 ) -> tuple[bytes, int]:
-    docx = build_docx(resume, template_id, project.application_type)
-    pdf = convert_docx_to_pdf(docx)
+    try:
+        pdf = compile_latex_to_pdf(build_latex(resume, template_id, project.application_type))
+    except PreviewConversionError as latex_error:
+        # Keep DOCX as an optional compatibility path for existing installs;
+        # callers still receive the clear unavailable error if both engines fail.
+        try:
+            docx = build_docx(resume, template_id, project.application_type)
+            pdf = convert_docx_to_pdf(docx)
+        except PreviewConversionError:
+            raise latex_error
     return pdf, count_pdf_pages(pdf)
 
 
