@@ -25,6 +25,7 @@ from resume_mvp.layout_tidy import skill_lines_for_export, tidy_resume_for_layou
 
 
 _TEMPLATE_STYLES = {
+    "overleaf-cn": {"font": "Helvetica Neue", "accent": "003E74", "margin": 1.2, "classic": True},
     "classic-cn": {"font": "SimSun", "accent": "111111", "margin": 1.6, "classic": True},
     "clear-single": {"font": "Microsoft YaHei", "accent": "2457D6", "margin": 1.7},
     "pro-double": {"font": "Microsoft YaHei", "accent": "214A72", "margin": 1.5},

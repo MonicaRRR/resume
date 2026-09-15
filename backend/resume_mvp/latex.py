@@ -13,10 +13,11 @@ def build_latex(
 ) -> str:
     """Build deterministic LaTeX source without interpolating raw user commands."""
     resume = tidy_resume_for_layout(resume)
-    compact = application_type in {"campus", "internship"}
+    compact = application_type in {"campus", "internship"} or template_id == "overleaf-cn"
     font_size = "9pt" if compact else "11pt"
     margin = "1.2cm" if compact else "1.6cm"
     accent = {
+        "overleaf-cn": "003E74",
         "classic-cn": "111111",
         "clear-single": "2457D6",
         "pro-double": "214A72",

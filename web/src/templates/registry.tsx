@@ -10,6 +10,7 @@ export type ResumeTemplate = {
 };
 
 export const TEMPLATES: ResumeTemplate[] = [
+  { id: "overleaf-cn", label: "Overleaf 中文模板", description: "基于 resume-chinese 的 XeLaTeX 模板，紧凑单栏、日期右对齐" },
   { id: "classic-cn", label: "经典中文单栏", description: "居中页眉、章节下划线、日期右对齐，贴近校招纸质稿" },
   { id: "clear-single", label: "清晰单栏", description: "信息顺序清楚，适合多数岗位" },
   { id: "pro-double", label: "专业双栏", description: "突出技能密度与专业能力" },
@@ -20,8 +21,8 @@ export const TEMPLATES: ResumeTemplate[] = [
 
 export function recommendTemplate(resume: ResumeDocument, _job: JobAnalysis | null): ResumeTemplate & { reason: string } {
   const skillCount = resume.skills.reduce((total, group) => total + group.items.length, 0);
-  let id = "classic-cn";
-  let reason = "经典中文单栏版式信息密度高，适合投递预览";
+  let id = "overleaf-cn";
+  let reason = "Overleaf 中文模板使用 XeLaTeX 排版，中文字体与日期对齐更稳定";
   if (resume.projects.length > resume.work_experience.length + 1) {
     id = "project-focus";
     reason = "项目证据比工作经历更丰富";

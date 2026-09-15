@@ -28,7 +28,7 @@ test("模板推荐根据简历证据密度选择且不改写内容", () => {
 
   const recommendation = recommendTemplate(resume, null);
 
-  expect(recommendation.id).toBe("classic-cn");
+  expect(recommendation.id).toBe("overleaf-cn");
   expect(resume.basics.name).toBe("张宁");
 });
 
