@@ -221,6 +221,8 @@ class ProjectRepository:
             session.add(version)
             session.flush()
             project.active_resume_version_id = version.id
+            # Any resume/fact change invalidates the cached JD evidence map.
+            project.match_report = None
             project.updated_at = utc_now()
             session.commit()
             return self._version(version)

@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 
 from resume_mvp.database import create_database
-from resume_mvp.domain import ResumeDocument, SkillGroup, SourcedText
+from resume_mvp.domain import MatchReport, ResumeDocument, SkillGroup, SourcedText
 from resume_mvp.repositories import ProjectRepository
 
 
@@ -38,6 +38,16 @@ def test_project_versions_are_immutable_and_switchable(repository: ProjectReposi
     assert repository.get(project.id).active_resume_version_id == first.id
     assert [version.id for version in repository.list_versions(project.id)] == [second.id, first.id, seeded_id]
     assert repository.get_version(first.id).resume.basics.name == ""
+
+
+def test_saving_new_resume_version_invalidates_cached_match_report(repository: ProjectRepository) -> None:
+    project = repository.create(
+        title="后端开发", company_name="示例科技", application_type="experienced", job_description="负责 API 开发"
+    )
+    repository.update(project.id, match_report=MatchReport(coverage=0.0, items=[]))
+    repository.save_version(project.id, ResumeDocument.blank(), reason="补充教育经历")
+
+    assert repository.get(project.id).match_report is None
 
 
 def test_database_migrates_application_type_for_existing_projects(tmp_path: Path) -> None:
