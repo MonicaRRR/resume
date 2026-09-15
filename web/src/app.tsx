@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { ProviderStatus } from "./components/ProviderStatus";
 import { HomePage } from "./pages/HomePage";
@@ -7,11 +8,16 @@ import { PracticePage } from "./pages/PracticePage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
+import { api } from "./api/client";
 
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000 } } });
 
 function AppFrame() {
+  const profile = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
+  const profileNeedsAttention = Boolean(
+    profile.data && (!profile.data.ready || profile.data.resume.education.length === 0),
+  );
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -20,7 +26,12 @@ function AppFrame() {
           <span>简历证据工作台</span>
         </Link>
         <nav className="topbar-nav" aria-label="主导航">
-          <Link to="/profile">经历库</Link>
+          <Link className="profile-nav-link" to="/profile">
+            经历库
+            {profileNeedsAttention && (
+              <span className="profile-nav-dot" role="status" aria-label="经历库有待完善内容" title="经历库有待完善内容" />
+            )}
+          </Link>
           <ProviderStatus />
         </nav>
       </header>

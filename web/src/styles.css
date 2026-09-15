@@ -558,6 +558,21 @@ select:focus-visible,
   text-decoration: none;
 }
 
+.profile-nav-link {
+  position: relative;
+}
+
+.profile-nav-dot {
+  position: absolute;
+  top: -3px;
+  right: -8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--apple-red);
+  box-shadow: 0 0 0 2px var(--apple-bg);
+}
+
 .brand {
   display: flex;
   align-items: center;
