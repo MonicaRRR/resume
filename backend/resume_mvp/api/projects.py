@@ -27,7 +27,7 @@ from resume_mvp.domain import (
     PatchDiscussionResult,
     ResumeVersion,
 )
-from resume_mvp.evidence_match import analyze_evidence_match
+from resume_mvp.evidence_match import analyze_evidence_match, merge_ai_and_rule_match
 from resume_mvp.ingestion import ImportResult, ResumeImportError, import_resume
 from resume_mvp.matching import calculate_match
 from resume_mvp.layout_tidy import tidy_resume_for_layout
@@ -275,7 +275,13 @@ def get_match(project_id: str, services: AppServices = Depends(get_services)) ->
     if project.job_analysis is None:
         raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
     if project.match_report is not None:
-        return project.match_report
+        # Reconcile cached AI output with the current active resume. This
+        # upgrades stale education/skill evidence after a resume edit without
+        # requiring another model request.
+        refreshed = merge_ai_and_rule_match(project.match_report, project.job_analysis, version.resume, version.facts)
+        if refreshed.model_dump(mode="json") != project.match_report.model_dump(mode="json"):
+            services.repository.update(project_id, match_report=refreshed)
+        return refreshed
     # Fallback until AI match has been generated.
     return calculate_match(project.job_analysis, version.resume, version.facts)
 
