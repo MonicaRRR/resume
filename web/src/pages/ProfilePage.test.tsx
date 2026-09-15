@@ -12,11 +12,12 @@ import { ProfilePage } from "./ProfilePage";
 
 function wrap(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const result = render(
     <QueryClientProvider client={client}>
       <MemoryRouter>{ui}</MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...result, client };
 }
 
 
@@ -50,4 +51,31 @@ test("导入后草稿含姓名", async () => {
   expect(screen.getByText(/请核对后点击保存/)).toBeInTheDocument();
   expect(screen.getByText(/解析质量分/)).toBeInTheDocument();
   expect(api.saveProfile).not.toHaveBeenCalled();
+});
+
+test("资料刷新时不会覆盖正在编辑的教育经历", async () => {
+  const user = userEvent.setup();
+  const saved = blankResume();
+  saved.basics.name = "李明";
+  saved.education = [{
+    id: "edu-1",
+    institution: "示例大学",
+    degree: "本科",
+    field: "软件工程",
+    start_date: "2022-09",
+    end_date: "2026-06",
+    highlights: [],
+  }];
+  const getProfile = vi.spyOn(api, "getProfile")
+    .mockResolvedValueOnce({ resume: saved, facts: [], ready: true })
+    .mockResolvedValueOnce({ resume: blankResume(), facts: [], ready: false });
+  const { client } = wrap(<ProfilePage />);
+
+  const institution = await screen.findByDisplayValue("示例大学");
+  await user.clear(institution);
+  await user.type(institution, "示例大学（已修改）");
+
+  await client.invalidateQueries({ queryKey: ["profile"] });
+  await waitFor(() => expect(getProfile).toHaveBeenCalledTimes(2));
+  expect(screen.getByDisplayValue("示例大学（已修改）")).toBeInTheDocument();
 });

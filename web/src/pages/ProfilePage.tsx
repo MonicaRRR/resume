@@ -17,9 +17,17 @@ export function ProfilePage() {
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [qualityScore, setQualityScore] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // React Query may refetch the singleton profile while the user is editing
+  // (for example when the window regains focus). Only hydrate the local draft
+  // once; subsequent server updates must not overwrite unsaved education,
+  // work, or project entries.
+  const draftHydratedRef = useRef(false);
 
   useEffect(() => {
-    if (profileQuery.data) setDraft(structuredClone(profileQuery.data.resume));
+    if (profileQuery.data && !draftHydratedRef.current) {
+      setDraft(structuredClone(profileQuery.data.resume));
+      draftHydratedRef.current = true;
+    }
   }, [profileQuery.data]);
 
   const save = useMutation({
