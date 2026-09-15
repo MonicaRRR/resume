@@ -52,6 +52,7 @@ export function WorkspacePage() {
 
   const projectQuery = useQuery({ queryKey: ["project", id], queryFn: () => api.getProject(id), enabled: Boolean(id) });
   const versionsQuery = useQuery({ queryKey: ["versions", id], queryFn: () => api.getVersions(id), enabled: Boolean(id) });
+  const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
   const providerQuery = useQuery({
     queryKey: ["provider-settings"],
     queryFn: api.getProviderSettings,
@@ -76,6 +77,21 @@ export function WorkspacePage() {
   useEffect(() => {
     if (activeVersion) setDraft(structuredClone(activeVersion.resume));
   }, [activeVersion?.id]);
+
+  useEffect(() => {
+    if (!activeVersion || !profileQuery.data || activeVersion.resume.education.length > 0) return;
+    const profileResume = profileQuery.data.resume;
+    if (profileResume.education.length === 0) return;
+    setDraft((current) => {
+      if (!current || current.education.length > 0) return current;
+      return {
+        ...current,
+        education: structuredClone(profileResume.education),
+        layout_profile: structuredClone(profileResume.layout_profile),
+      };
+    });
+    setMessage("已将经历库中的教育经历和版式带入当前投递稿；确认后保存即可生成新版本。");
+  }, [activeVersion?.id, activeVersion?.resume.education.length, profileQuery.data]);
 
   useEffect(() => {
     const run = optimization.run;

@@ -78,11 +78,11 @@ def test_preview_pdf_accepts_live_resume_body(tmp_path: Path, monkeypatch) -> No
 
     captured: dict[str, object] = {}
 
-    def fake_convert(docx_bytes: bytes) -> bytes:
-        captured["docx"] = docx_bytes
+    def fake_compile(source_text: str) -> bytes:
+        captured["latex"] = source_text
         return _tiny_pdf(1)
 
-    monkeypatch.setattr("resume_mvp.api.exports.convert_docx_to_pdf", fake_convert)
+    monkeypatch.setattr("resume_mvp.api.exports.compile_latex_to_pdf", fake_compile)
     monkeypatch.setattr("resume_mvp.api.exports.count_pdf_pages", lambda _pdf: 1)
 
     response = client.post(
@@ -91,11 +91,7 @@ def test_preview_pdf_accepts_live_resume_body(tmp_path: Path, monkeypatch) -> No
     )
 
     assert response.status_code == 200
-    assert captured["docx"]
-    from io import BytesIO
-    from docx import Document
-    text = "\n".join(p.text for p in Document(BytesIO(captured["docx"])).paragraphs)
-    assert "预览草稿名" in text
+    assert "预览草稿名" in captured["latex"]
 
 
 def test_preview_pdf_unavailable_when_conversion_fails(tmp_path: Path, monkeypatch) -> None:
@@ -105,6 +101,7 @@ def test_preview_pdf_unavailable_when_conversion_fails(tmp_path: Path, monkeypat
     def boom(_docx: bytes) -> bytes:
         raise PreviewConversionError("未找到 LibreOffice（soffice），无法生成 PDF 预览")
 
+    monkeypatch.setattr("resume_mvp.api.exports.compile_latex_to_pdf", lambda _source: (_ for _ in ()).throw(PreviewConversionError("未找到 XeLaTeX")))
     monkeypatch.setattr("resume_mvp.api.exports.convert_docx_to_pdf", boom)
 
     response = client.post(f"/api/projects/{project_id}/preview/pdf", json={})
