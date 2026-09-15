@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
@@ -10,8 +11,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { api } from "./api/client";
 
-
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000 } } });
 
 function AppFrame() {
   const profile = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
@@ -47,5 +46,6 @@ function AppFrame() {
 }
 
 export function App() {
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 15_000 } } }));
   return <QueryClientProvider client={queryClient}><BrowserRouter><AppFrame /></BrowserRouter></QueryClientProvider>;
 }
