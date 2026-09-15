@@ -138,6 +138,25 @@ def test_match_education_eligibility_against_education_background() -> None:
     assert "计算机" in report.items[0].excerpts[0]
 
 
+def test_education_window_requirement_matches_exact_27th_cohort() -> None:
+    resume = ResumeDocument.blank()
+    resume.education = [EducationEntry(
+        institution="示例大学", degree="本科", field="人工智能",
+        start_date="2023-09", end_date="2027-08",
+    )]
+    analysis = JobAnalysis(requirements=[JobRequirement(
+        id="edu-window",
+        text="2026年9月-2027年8月毕业的27届应届生，本科及以上学历，计算机、软件工程、人工智能等相关专业",
+        evidence_quote="27届应届生，本科及以上，人工智能相关专业",
+    )])
+
+    item = calculate_match(analysis, resume, []).items[0]
+
+    assert item.status == "已有证据"
+    assert "2027-08" in item.excerpts[0]
+    assert "人工智能" in item.excerpts[0]
+
+
 def test_soft_business_design_requirement_is_not_hard_miss() -> None:
     resume = ResumeDocument.blank()
     resume.projects = [
