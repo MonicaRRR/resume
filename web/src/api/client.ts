@@ -215,6 +215,10 @@ export async function downloadDraftDocx(
   );
 }
 
+export async function downloadDraftLatex(projectId: string, resume: ResumeDocument, templateId: string, filename: string): Promise<void> {
+  await downloadFile(`/api/projects/${projectId}/export/latex`, filename, "POST", { resume, template_id: templateId });
+}
+
 export async function downloadPreviewPdf(
   projectId: string,
   resume: ResumeDocument,
