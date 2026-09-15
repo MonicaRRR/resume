@@ -474,7 +474,7 @@ export function WorkspacePage() {
             {stage === "export" && <section className="export-panel">
               <div className="panel-heading"><div><span className="panel-index">05</span><h2>本地导出</h2></div><span>可导出</span></div>
               {overflow && <div className="overflow-warning"><strong>当前超过 1 页</strong><span>仍可导出 Word / PDF；校招/实习投递时建议再精简。</span></div>}
-              <p className="panel-note">正式投递推荐导出 <strong>Word（DOCX）</strong>；右侧是同一份 Word 转成的真实 PDF 分页预览。</p>
+              <p className="panel-note">现在可以分别下载 <strong>LaTeX 源文件（.tex）</strong> 和 <strong>PDF</strong>；Word（DOCX）仍作为兼容格式保留。</p>
               <div className="export-grid">
                 <button onClick={() => draft && void downloadDraftDocx(id, draft, project.selected_template_id, `${project.title}.docx`)} disabled={!draft}><span>DOCX</span><strong>下载 Word 简历</strong><small>与右侧预览同源，含当前基础信息</small></button>
                 <button onClick={() => draft && void downloadDraftLatex(id, draft, project.selected_template_id, `${project.title}.tex`)} disabled={!draft}><span>TEX</span><strong>下载 LaTeX 源文件</strong><small>适合继续自定义排版</small></button>
