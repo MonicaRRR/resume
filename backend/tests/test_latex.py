@@ -49,3 +49,12 @@ def test_latex_campus_and_internship_use_compact_one_page_options() -> None:
     assert "1.2cm" in campus
     assert "11pt" in experienced.split("\\begin{document}", 1)[0]
 
+
+def test_overleaf_template_uses_supplied_class_and_macros() -> None:
+    resume = ResumeDocument.blank()
+    resume.basics.name = "张三"
+    resume.education = [EducationEntry(institution="示例大学", degree="本科", field="软件工程")]
+    source = build_latex(resume, "overleaf-cn", "campus")
+    assert "\\documentclass{setting}" in source
+    assert "\\logosection{\\faGraduationCap}{教育经历}" in source
+    assert "\\datedline" in source

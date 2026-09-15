@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile
+import shutil
 
 from lxml import etree
 
@@ -77,6 +78,11 @@ def compile_latex_to_pdf(source_text: str, *, timeout: float = 90) -> bytes:
         root = Path(directory)
         source = root / "resume.tex"
         source.write_text(source_text, encoding="utf-8")
+        if "template=overleaf-cn" in source_text:
+            template_root = Path(__file__).resolve().parents[1] / "templates" / "overleaf-resume-chinese"
+            if template_root.exists():
+                shutil.copy2(template_root / "setting.cls", root / "setting.cls")
+                shutil.copytree(template_root / "Font", root / "Font")
         command = [binary, "-interaction=nonstopmode", "-halt-on-error", source.name]
         if Path(binary).name == "tectonic":
             command = [binary, "--untrusted", source.name]

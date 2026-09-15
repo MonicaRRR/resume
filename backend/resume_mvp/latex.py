@@ -13,6 +13,8 @@ def build_latex(
 ) -> str:
     """Build deterministic LaTeX source without interpolating raw user commands."""
     resume = tidy_resume_for_layout(resume)
+    if template_id == "overleaf-cn":
+        return _build_overleaf_latex(resume, application_type)
     compact = application_type in {"campus", "internship"} or template_id == "overleaf-cn"
     font_size = "9pt" if compact else "11pt"
     margin = "1.2cm" if compact else "1.6cm"
@@ -93,6 +95,63 @@ def build_latex(
         lines.extend(_section("奖项", [entry.name for entry in resume.awards]))
     lines.append("\\end{document}")
     return "\n".join(lines) + "\n"
+
+
+def _build_overleaf_latex(resume: ResumeDocument, application_type: ApplicationType) -> str:
+    compact = application_type in {"campus", "internship"}
+    lines = [
+        "% resume-evidence-workbench template=overleaf-cn",
+        "\\documentclass{setting}",
+        "\\begin{document}",
+        "\\pagenumbering{gobble}",
+        f"\\name{{{_escape(resume.basics.name or '姓名')}}}",
+    ]
+    contact = _contact_line(resume)
+    if contact:
+        parts = [resume.basics.phone, resume.basics.email]
+        if resume.basics.location.strip():
+            parts.append(resume.basics.location)
+        lines.append("\\basicContactInfo" + "{" + "}{".join(_escape(part) for part in parts[:2]) + "}")
+        if resume.basics.location.strip():
+            lines.append(_escape(resume.basics.location))
+    if resume.basics.target_role.value.strip():
+        lines.append(_escape(resume.basics.target_role.value))
+    if resume.education:
+        lines.append("\\logosection{\\faGraduationCap}{教育经历}")
+        for item in resume.education:
+            lines.append(f"\\datedline{{\\textbf{{{_escape(item.institution)}}}}}{{\\dateRange{{{_escape(item.start_date)}}}{{{_escape(item.end_date)}}}}}")
+            details = " \\quad ".join(_escape(value) for value in [item.field, item.degree] if value.strip())
+            if details:
+                lines.append(details)
+            lines.extend(_overleaf_bullets([highlight.value for highlight in item.highlights]))
+    if resume.work_experience:
+        lines.append("\\logosection{\\faSuitcase}{工作经历}")
+        for item in resume.work_experience:
+            lines.append(f"\\datedline{{\\textbf{{{_escape(item.company)}}}}}{{\\dateRange{{{_escape(item.start_date)}}}{{{_escape(item.end_date)}}}}}")
+            lines.append(_escape(item.title))
+            lines.extend(_overleaf_bullets([bullet.value for bullet in item.bullets]))
+    if resume.projects:
+        lines.append("\\logosection{\\faWrench}{项目经历}")
+        for item in resume.projects:
+            lines.append(f"\\datedline{{\\textbf{{{_escape(item.name)}}}}}{{\\dateRange{{{_escape(item.start_date)}}}{{{_escape(item.end_date)}}}}}")
+            if item.role.strip(): lines.append(_escape(item.role))
+            lines.extend(_overleaf_bullets([bullet.value for bullet in item.bullets]))
+    skills = skill_lines_for_export(resume.skills)
+    if skills:
+        lines.append("\\logosection{\\faCogs}{专业技能}")
+        lines.extend(_overleaf_bullets(skills))
+    if resume.certificates or resume.awards:
+        lines.append("\\logosection{\\faHeart}{证书与奖项}")
+        lines.extend(_overleaf_bullets([entry.name for entry in [*resume.certificates, *resume.awards]]))
+    lines.append("\\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def _overleaf_bullets(values: list[str]) -> list[str]:
+    clean = [value.strip() for value in values if value and value.strip()]
+    if not clean:
+        return []
+    return ["\\begin{itemize}", *[f"  \\item {_escape(value)}" for value in clean], "\\end{itemize}"]
 
 
 def _section(title: str, values: list, *, sourced: bool = False) -> list[str]:
