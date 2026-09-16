@@ -50,7 +50,8 @@ async def analyze_job(
     for requirement in analysis.requirements:
         # “27届应届生” conventionally means the 2026-09—2027-08 graduation
         # window when the JD does not provide a more precise date.
-        defaulted_cohort = bool(re.search(r"27\s*届", requirement.text) and not re.search(r"20\d{2}\s*年", requirement.text))
+        cohort_text = f"{requirement.text} {requirement.evidence_quote}"
+        defaulted_cohort = bool(re.search(r"27\s*届", cohort_text) and not re.search(r"20\d{2}\s*年", cohort_text))
         if defaulted_cohort:
             requirement.inferred = True
             requirement.evidence_quote = "2026年9月—2027年8月毕业（27届默认范围）"
