@@ -33,8 +33,6 @@ def facts_from_resume(resume: ResumeDocument) -> list[Fact]:
         add("基本信息", f"生日：{basics.birthday.strip()}", "基本信息")
     if basics.political_status.strip():
         add("基本信息", f"政治面貌：{basics.political_status.strip()}", "基本信息")
-    if basics.target_role.value.strip():
-        add("基本信息", f"期望职位：{basics.target_role.value.strip()}", "基本信息")
     if basics.location.strip():
         add("基本信息", f"所在城市：{basics.location.strip()}", "基本信息")
     if basics.wechat.strip():

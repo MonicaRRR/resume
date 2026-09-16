@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import base64
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -65,7 +66,7 @@ def convert_docx_to_pdf(docx_bytes: bytes, *, timeout: float = 90) -> bytes:
         return pdf_path.read_bytes()
 
 
-def compile_latex_to_pdf(source_text: str, *, timeout: float = 90) -> bytes:
+def compile_latex_to_pdf(source_text: str, *, photo_data_url: str = "", timeout: float = 90) -> bytes:
     """Compile UTF-8 XeLaTeX source in an isolated temporary directory."""
     if not source_text.strip():
         raise PreviewConversionError("LaTeX 内容为空")
@@ -83,6 +84,10 @@ def compile_latex_to_pdf(source_text: str, *, timeout: float = 90) -> bytes:
             if template_root.exists():
                 shutil.copy2(template_root / "setting.cls", root / "setting.cls")
                 shutil.copytree(template_root / "Font", root / "Font")
+        photo_bytes = _decode_photo(photo_data_url)
+        if photo_bytes:
+            filename = "avatar.png" if photo_data_url.lower().startswith("data:image/png") else "avatar.jpg"
+            (root / filename).write_bytes(photo_bytes)
         command = [binary, "-interaction=nonstopmode", "-halt-on-error", source.name]
         if Path(binary).name == "tectonic":
             command = [binary, "--untrusted", source.name]
@@ -95,6 +100,18 @@ def compile_latex_to_pdf(source_text: str, *, timeout: float = 90) -> bytes:
             detail = (completed.stderr or completed.stdout or "").strip()
             raise PreviewConversionError(f"LaTeX 未能生成 PDF{('：' + detail[:200]) if detail else ''}")
         return pdf_path.read_bytes()
+
+
+def _decode_photo(data_url: str) -> bytes | None:
+    if not data_url or "," not in data_url:
+        return None
+    header, payload = data_url.split(",", 1)
+    if not header.startswith("data:image/"):
+        return None
+    try:
+        return base64.b64decode(payload, validate=True)
+    except (ValueError, TypeError):
+        return None
 
 
 def count_pdf_pages(pdf_bytes: bytes) -> int:

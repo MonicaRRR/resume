@@ -17,6 +17,7 @@ from resume_mvp.domain import (
     PracticeSession,
     ResumeDocument,
     ResumeVersion,
+    SourcedText,
     utc_now,
 )
 from resume_mvp.optimization_models import LayoutReport, OptimizationRun, OptimizationStepKind
@@ -81,6 +82,11 @@ class ProjectRepository:
             return resume, facts
 
     def save_profile(self, resume: ResumeDocument) -> tuple[ResumeDocument, list[Fact]]:
+        # The profile is a reusable experience library. Target roles belong to
+        # an application project, so never persist one here (including imported
+        # resumes that happened to contain an old target role).
+        resume = resume.model_copy(deep=True)
+        resume.basics.target_role = SourcedText()
         facts = facts_from_resume(resume)
         with self._sessions() as session:
             record = session.get(UserProfileRecord, "default")

@@ -49,7 +49,7 @@ export function ProjectForm({ onCreate, pending = false, profileReady = false }:
   return (
     <form className="project-form" onSubmit={submit}>
       <div className="form-heading">
-        <span className="step-chip">新项目</span>
+        <span className="step-chip">新投递</span>
         <h2>这次准备投哪里？</h2>
         <p>填写岗位信息后，创建时会自动分析 JD 并做证据匹配；随后可在工作台确认建议。</p>
       </div>
@@ -59,8 +59,8 @@ export function ProjectForm({ onCreate, pending = false, profileReady = false }:
         </p>
       )}
       <label>
-        <span>项目名称</span>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：字节跳动后端工程师" disabled={!profileReady} />
+        <span>投递岗位</span>
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例：后端开发工程师" disabled={!profileReady} />
       </label>
       <label>
         <span>公司名称 <small>选填</small></span>

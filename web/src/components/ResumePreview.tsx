@@ -13,6 +13,7 @@ export function ResumePreview({
   resume,
   templateId,
   applicationType,
+  targetRole = "",
   onOverflowChange,
   variant = "default",
 }: {
@@ -20,6 +21,7 @@ export function ResumePreview({
   resume: ResumeDocument;
   templateId: string;
   applicationType: ApplicationType;
+  targetRole?: string;
   onOverflowChange?: (overflow: boolean) => void;
   variant?: "default" | "annotation";
 }) {
@@ -118,7 +120,7 @@ export function ResumePreview({
         {status === "error" && fallback && (
           <div className="resume-html-fallback" aria-label="简历浏览器预览">
             <h1>{resume.basics.name || "未填写姓名"}</h1>
-            <p>{[resume.basics.target_role.value, resume.basics.email, resume.basics.phone, resume.basics.location].filter(Boolean).join(" · ")}</p>
+            <p>{[targetRole || resume.basics.target_role.value, resume.basics.email, resume.basics.phone, resume.basics.location].filter(Boolean).join(" · ")}</p>
             {resume.basics.summary.value && <section><h2>个人简介</h2><p>{resume.basics.summary.value}</p></section>}
             {resume.education.length > 0 && <section><h2>教育经历</h2>{resume.education.map((item) => <p key={item.id}><strong>{item.institution}</strong> · {item.degree} · {item.field} · {item.start_date}—{item.end_date}</p>)}</section>}
             {resume.work_experience.length > 0 && <section><h2>实习/工作经历</h2>{resume.work_experience.map((item) => <div key={item.id}><p><strong>{item.company}</strong> · {item.title} · {item.start_date}—{item.end_date}</p>{item.bullets.map((bullet, index) => <p key={`${item.id}-b-${index}`}>• {bullet.value}</p>)}</div>)}</section>}

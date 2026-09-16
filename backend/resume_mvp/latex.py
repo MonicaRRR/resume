@@ -106,6 +106,13 @@ def _build_overleaf_latex(resume: ResumeDocument, application_type: ApplicationT
         "\\pagenumbering{gobble}",
         f"\\name{{{_escape(resume.basics.name or '姓名')}}}",
     ]
+    if resume.basics.photo_data_url:
+        photo_filename = _photo_filename(resume.basics.photo_data_url)
+        lines.extend([
+            "\\begin{tikzpicture}[remember picture, overlay]",
+            f"  \\node[anchor=north east] at ($(current page.north east)+(-1.2cm,-0.8cm)$) {{\\IfFileExists{{{photo_filename}}}{{\\includegraphics[height=3.2cm,keepaspectratio]{{{photo_filename}}}}}{{}}}};",
+            "\\end{tikzpicture}",
+        ])
     contact = _contact_line(resume)
     if contact:
         parts = [resume.basics.phone, resume.basics.email]
@@ -181,3 +188,7 @@ def _dates(start: str, end: str) -> str:
 def _contact_line(resume: ResumeDocument) -> str:
     basics = resume.basics
     return " · ".join(value for value in [basics.phone, basics.email, basics.location] if value.strip())
+
+
+def _photo_filename(data_url: str) -> str:
+    return "avatar.png" if data_url.lower().startswith("data:image/png") else "avatar.jpg"

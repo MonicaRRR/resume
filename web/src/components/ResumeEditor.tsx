@@ -89,7 +89,7 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
     onChange(next);
   };
 
-  const updateSourced = (key: "target_role" | "summary", value: string) => {
+  const updateSourced = (key: "summary", value: string) => {
     const next = structuredClone(resume);
     next.basics[key].value = value;
     next.basics[key].origin = "manual";
@@ -144,7 +144,6 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
         </div>
         <div className="editor-grid">
           <label>姓名<input value={resume.basics.name} onChange={(event) => updateBasics("name", event.target.value)} /></label>
-          <label>目标岗位<input value={resume.basics.target_role.value} onChange={(event) => updateSourced("target_role", event.target.value)} /></label>
           <label>性别
             <AppleSelect
               aria-label="性别"

@@ -89,7 +89,6 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
     wechat: "",
     political_status: "",
     photo_data_url: "",
-    target_role: "",
   });
   const [education, setEducation] = useState<EducationDraft[]>([emptyEducation()]);
   const [work, setWork] = useState<WorkDraft[]>([emptyWork()]);
@@ -111,10 +110,6 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
     event.preventDefault();
     if (!basics.name.trim()) {
       setError("请填写姓名");
-      return;
-    }
-    if (!basics.target_role.trim()) {
-      setError("请填写期望职位");
       return;
     }
     const filledEducation = education.filter((item) => item.institution.trim());
@@ -153,8 +148,7 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
     resume.basics.wechat = basics.wechat.trim();
     resume.basics.political_status = basics.political_status.trim();
     resume.basics.photo_data_url = basics.photo_data_url;
-    resume.basics.target_role = sourcedText(basics.target_role.trim());
-    addFact("基本信息", `${basics.name.trim()}，期望职位：${basics.target_role.trim()}`, "基本信息");
+    addFact("基本信息", `姓名：${basics.name.trim()}`, "基本信息");
     if (basics.gender.trim()) addFact("基本信息", `性别：${basics.gender.trim()}`, "基本信息");
     if (basics.birthday.trim()) addFact("基本信息", `生日：${basics.birthday.trim()}`, "基本信息");
     if (basics.political_status.trim()) addFact("基本信息", `政治面貌：${basics.political_status.trim()}`, "基本信息");
@@ -190,7 +184,7 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
       resume.work_experience.push({
         id: item.id,
         company: item.company.trim() || "未命名公司",
-        title: item.title.trim() || basics.target_role.trim(),
+        title: item.title.trim(),
         start_date: item.start_date.trim(),
         end_date: item.end_date.trim(),
         bullets: [{
@@ -266,7 +260,7 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
       <section className="intake-section">
         <div className="intake-section-head">
           <h3>基本信息</h3>
-          <small>姓名与期望职位必填；证件照、生日等建议填全</small>
+          <small>姓名必填；证件照、生日等建议填全。投递岗位会在具体项目中填写</small>
         </div>
         <div className="basics-editor">
           <div className="photo-uploader">
@@ -300,7 +294,6 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
           </div>
           <div className="intake-grid">
             <label>姓名<input required aria-label="姓名" value={basics.name} onChange={(event) => setBasics({ ...basics, name: event.target.value })} placeholder="例：张三" /></label>
-            <label>期望职位<input required aria-label="期望职位" value={basics.target_role} onChange={(event) => setBasics({ ...basics, target_role: event.target.value })} placeholder="例：后端开发工程师" /></label>
             <label>性别
               <AppleSelect aria-label="性别" value={basics.gender} options={GENDER_OPTIONS} onChange={(gender) => setBasics({ ...basics, gender })} />
             </label>
