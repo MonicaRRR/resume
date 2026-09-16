@@ -16,8 +16,8 @@ def build_latex(
     if template_id == "overleaf-cn":
         return _build_overleaf_latex(resume, application_type)
     compact = application_type in {"campus", "internship"} or template_id == "overleaf-cn"
-    font_size = "9pt" if compact else "11pt"
-    margin = "1.2cm" if compact else "1.6cm"
+    font_size = "8pt" if compact else "11pt"
+    margin = "0.75cm" if compact else "1.6cm"
     accent = {
         "overleaf-cn": "003E74",
         "classic-cn": "111111",
@@ -40,7 +40,7 @@ def build_latex(
         "\\definecolor{resumeaccent}{HTML}{" + accent + "}",
         "\\pagestyle{empty}",
         "\\setlength{\\parindent}{0pt}",
-        "\\setlist[itemize]{leftmargin=1.2em,nosep}",
+        "\\setlist[itemize]{leftmargin=1.1em,nosep,topsep=0pt,partopsep=0pt}",
         "\\begin{document}",
         "\\begin{center}",
         "{\\Huge \\textbf{" + _escape(resume.basics.name or "姓名") + "}}\\\\",
@@ -104,6 +104,8 @@ def _build_overleaf_latex(resume: ResumeDocument, application_type: ApplicationT
         "\\documentclass{setting}",
         "\\begin{document}",
         "\\pagenumbering{gobble}",
+        "\\geometry{top=0.75cm,bottom=0.55cm,left=0.85cm,right=0.85cm}",
+        "\\small" if compact else "",
         f"\\name{{{_escape(resume.basics.name or '姓名')}}}",
     ]
     if resume.basics.photo_data_url:

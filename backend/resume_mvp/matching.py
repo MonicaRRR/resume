@@ -111,6 +111,7 @@ _SOFT_PATTERNS = [
 class EvidenceSnippet:
     text: str
     fact_ids: list[str] = field(default_factory=list)
+    kind: str = "other"
 
 
 def calculate_match(
@@ -131,11 +132,16 @@ def calculate_match(
             weighted_score += contribution
             continue
 
+        allowed_evidence = evidence
+        if _requires_experience_evidence(req_text):
+            allowed_evidence = [snippet for snippet in evidence if snippet.kind in {"work", "project", "education", "fact"}]
+        elif _is_education_requirement(req_text):
+            allowed_evidence = [snippet for snippet in evidence if snippet.kind in {"education", "fact"}]
         edu_score, edu_snippets = _education_requirement_match(req_text, resume)
-        cap_score, cap_snippets = _capability_requirement_match(req_text, resume, evidence)
+        cap_score, cap_snippets = _capability_requirement_match(req_text, resume, allowed_evidence)
         scored = [
             (_best_similarity(requirement.text, requirement.evidence_quote, snippet.text), snippet)
-            for snippet in evidence
+            for snippet in allowed_evidence
         ]
         text_best = max((score for score, _ in scored), default=0.0)
         strongest = max(text_best, edu_score, cap_score)
@@ -364,7 +370,7 @@ def _retrieve_snippets(
 def _education_requirement_match(req_text: str, resume: ResumeDocument) -> tuple[float, list[EvidenceSnippet]]:
     if not resume.education:
         return 0.0, []
-    if not any(marker in req_text for marker in ("学历", "应届", "届", "毕业", "本科", "硕士", "博士", "专业", "大专")):
+    if not _is_education_requirement(req_text):
         return 0.0, []
 
     wanted_years = _wanted_grad_years(req_text)
@@ -379,6 +385,19 @@ def _education_requirement_match(req_text: str, resume: ResumeDocument) -> tuple
             best_score = score
             best_snippets = [snippet] if snippet else []
     return best_score, best_snippets
+
+
+def _is_education_requirement(text: str) -> bool:
+    if "专业技能" in text:
+        return False
+    return any(marker in text for marker in ("学历", "应届", "届", "毕业", "本科", "硕士", "博士", "专业", "大专"))
+
+
+def _requires_experience_evidence(text: str) -> bool:
+    return any(marker in text.lower() for marker in (
+        "经验", "工作", "实习", "项目", "负责", "参与", "开发", "设计", "落地", "实践",
+        "业务", "系统", "平台", "优化", "排查", "推进", "交付", "维护", "搭建",
+    ))
 
 
 def _score_education_entry(
@@ -397,6 +416,8 @@ def _score_education_entry(
         checks.append(year_ok)
         if grad_year:
             cohort = _cohort_label(grad_year)
+            if "27届" in req_text and grad_year in {2026, 2027}:
+                cohort = "27届默认毕业范围"
             notes.append(f"{item.end_date or grad_year}毕业" + (f"（{cohort}）" if cohort else ""))
         elif year_ok is False:
             notes.append("毕业时间未填或不匹配")
@@ -417,13 +438,13 @@ def _score_education_entry(
     if not checks:
         # Generic education mention — weak credit if any education exists.
         header = _education_header(item)
-        return (0.35, EvidenceSnippet(header)) if header else (0.0, None)
+        return (0.35, EvidenceSnippet(header, kind="education")) if header else (0.0, None)
 
     passed = sum(1 for check in checks if check)
     ratio = passed / len(checks)
     header = _education_header(item)
     detail = "；".join(notes) if notes else header
-    snippet = EvidenceSnippet(f"教育背景：{detail}" if detail else header)
+    snippet = EvidenceSnippet(f"教育背景：{detail}" if detail else header, kind="education")
     if ratio >= 1.0:
         return 0.95, snippet
     if ratio >= 0.67:
@@ -445,9 +466,12 @@ def _education_header(item: EducationEntry) -> str:
 
 def _wanted_grad_years(text: str) -> set[int]:
     years: set[int] = set()
-    for match in re.finditer(r"20(\d{2})\s*届", text):
+    for match in re.finditer(r"(?:20)?(\d{2})\s*届", text):
         # 27届 => graduating around 2027
-        years.add(2000 + int(match.group(1)))
+        cohort_year = 2000 + int(match.group(1))
+        years.add(cohort_year)
+        if match.group(1) == "27":
+            years.add(2026)
     for match in re.finditer(r"(20\d{2})\s*年", text):
         years.add(int(match.group(1)))
     # Window like 2026年9月-2027年8月：both years count as acceptable graduation years.
@@ -503,50 +527,51 @@ def _collect_evidence(resume: ResumeDocument, facts: list[Fact]) -> list[Evidenc
     snippets: list[EvidenceSnippet] = []
     seen: set[str] = set()
 
-    def add(text: str, fact_ids: list[str] | None = None) -> None:
+    def add(text: str, fact_ids: list[str] | None = None, kind: str = "other") -> None:
         cleaned = text.strip()
         if not cleaned or cleaned in seen:
             return
         seen.add(cleaned)
-        snippets.append(EvidenceSnippet(text=cleaned, fact_ids=list(fact_ids or [])))
+        snippets.append(EvidenceSnippet(text=cleaned, fact_ids=list(fact_ids or []), kind=kind))
 
     for fact in facts:
-        add(fact.statement, [fact.id])
+        kind = "skill" if fact.category == "专业技能" else "fact"
+        add(fact.statement, [fact.id], kind)
 
     if resume.basics.summary.value.strip():
-        add(resume.basics.summary.value, list(resume.basics.summary.source_fact_ids))
+        add(resume.basics.summary.value, list(resume.basics.summary.source_fact_ids), "fact")
     if resume.basics.target_role.value.strip():
-        add(resume.basics.target_role.value, list(resume.basics.target_role.source_fact_ids))
+        add(resume.basics.target_role.value, list(resume.basics.target_role.source_fact_ids), "fact")
 
     for item in resume.work_experience:
         header = " ".join(part for part in [item.company, item.title] if part.strip())
         if header:
-            add(header)
+            add(header, kind="work")
         for bullet in item.bullets:
-            add(bullet.value, list(bullet.source_fact_ids))
+            add(bullet.value, list(bullet.source_fact_ids), "work")
 
     for item in resume.projects:
         header = " ".join(part for part in [item.name, item.role] if part.strip())
         if header:
-            add(header)
+            add(header, kind="project")
         for bullet in item.bullets:
-            add(bullet.value, list(bullet.source_fact_ids))
+            add(bullet.value, list(bullet.source_fact_ids), "project")
 
     for item in resume.education:
         header = _education_header(item)
         if header:
-            add(header)
+            add(header, kind="education")
             grad_year = _parse_year(item.end_date)
             if grad_year:
-                add(f"{header}，{grad_year}年毕业，{_cohort_label(grad_year)}应届")
+                add(f"{header}，{grad_year}年毕业，{_cohort_label(grad_year)}应届", kind="education")
         for highlight in item.highlights:
-            add(highlight.value, list(highlight.source_fact_ids))
+            add(highlight.value, list(highlight.source_fact_ids), "education")
 
     for group in resume.skills:
         for item in group.items:
-            add(item.value, list(item.source_fact_ids))
+            add(item.value, list(item.source_fact_ids), "skill")
             for part in re.split(r"[、,，/|]", item.value):
-                add(part.strip(), list(item.source_fact_ids))
+                add(part.strip(), list(item.source_fact_ids), "skill")
 
     for entry in resume.certificates:
         add(entry.name)
