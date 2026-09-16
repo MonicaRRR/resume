@@ -13,6 +13,7 @@ from resume_mvp.domain import (
     JobAnalysis,
     JobProject,
     MatchReport,
+    QuestionSet,
     PracticeSession,
     ResumeDocument,
     ResumeVersion,
@@ -24,6 +25,7 @@ from resume_mvp.tables import (
     OptimizationRunRecord,
     OptimizationStepRecord,
     PracticeSessionRecord,
+    QuestionSetRecord,
     ProjectRecord,
     ResumeVersionRecord,
     UserProfileRecord,
@@ -40,6 +42,10 @@ class VersionNotFoundError(LookupError):
 
 
 class PracticeSessionNotFoundError(LookupError):
+    pass
+
+
+class QuestionSetNotFoundError(LookupError):
     pass
 
 
@@ -144,6 +150,9 @@ class ProjectRepository:
                 raise ProjectNotFoundError(project_id)
             session.execute(
                 delete(PracticeSessionRecord).where(PracticeSessionRecord.project_id == project_id)
+            )
+            session.execute(
+                delete(QuestionSetRecord).where(QuestionSetRecord.project_id == project_id)
             )
             optimization_run_ids = select(OptimizationRunRecord.id).where(
                 OptimizationRunRecord.project_id == project_id
@@ -306,6 +315,69 @@ class ProjectRepository:
                 raise PracticeSessionNotFoundError(session_id)
             return PracticeSession.model_validate(record.payload)
 
+    def list_practice(self, project_id: str) -> list[PracticeSession]:
+        """Return all practice sessions for a project, newest first."""
+        self.get(project_id)
+        with self._sessions() as session:
+            records = session.scalars(
+                select(PracticeSessionRecord)
+                .where(PracticeSessionRecord.project_id == project_id)
+                .order_by(PracticeSessionRecord.updated_at.desc(), PracticeSessionRecord.id.asc())
+            ).all()
+            return [PracticeSession.model_validate(record.payload) for record in records]
+
+    def save_question_set(self, question_set: QuestionSet) -> QuestionSet:
+        with self._sessions() as session:
+            project = session.get(ProjectRecord, question_set.project_id)
+            if project is None:
+                raise ProjectNotFoundError(question_set.project_id)
+            record = session.get(QuestionSetRecord, question_set.id)
+            payload = question_set.model_dump(mode="json")
+            if record is None:
+                record = QuestionSetRecord(
+                    id=question_set.id,
+                    project_id=question_set.project_id,
+                    payload=payload,
+                    updated_at=question_set.updated_at,
+                )
+                session.add(record)
+            else:
+                record.payload = payload
+                record.updated_at = question_set.updated_at
+            session.commit()
+            return question_set
+
+    def list_question_sets(self, project_id: str) -> list[QuestionSet]:
+        self.get(project_id)
+        with self._sessions() as session:
+            records = session.scalars(
+                select(QuestionSetRecord)
+                .where(QuestionSetRecord.project_id == project_id)
+                .order_by(QuestionSetRecord.updated_at.desc())
+            ).all()
+            return [QuestionSet.model_validate(record.payload) for record in records]
+
+    def get_question_set(self, question_set_id: str) -> QuestionSet:
+        with self._sessions() as session:
+            record = session.get(QuestionSetRecord, question_set_id)
+            if record is None:
+                raise QuestionSetNotFoundError(question_set_id)
+            return QuestionSet.model_validate(record.payload)
+
+    def reuse_question_set(self, question_set_id: str) -> QuestionSet:
+        with self._sessions() as session:
+            record = session.get(QuestionSetRecord, question_set_id)
+            if record is None:
+                raise QuestionSetNotFoundError(question_set_id)
+            current = QuestionSet.model_validate(record.payload)
+            updated = current.model_copy(
+                update={"reuse_count": current.reuse_count + 1, "updated_at": self._clock()}
+            )
+            record.payload = updated.model_dump(mode="json")
+            record.updated_at = updated.updated_at
+            session.commit()
+            return updated
+
     def create_optimization_run(self, run: OptimizationRun) -> OptimizationRun:
         """Persist a validated, frozen optimization input and return its payload."""
         run_payload = run.model_dump(mode="python") if isinstance(run, OptimizationRun) else run
@@ -348,6 +420,17 @@ class ProjectRepository:
             if record is None:
                 return None
             return self._optimization_run(record)
+
+    def list_optimization_runs(self, project_id: str) -> list[OptimizationRun]:
+        """Return all optimization runs for a project, newest first."""
+        self.get(project_id)
+        with self._sessions() as session:
+            records = session.scalars(
+                select(OptimizationRunRecord)
+                .where(OptimizationRunRecord.project_id == project_id)
+                .order_by(OptimizationRunRecord.updated_at.desc(), OptimizationRunRecord.id.asc())
+            ).all()
+            return [self._optimization_run(record) for record in records]
 
     def update_optimization_run(self, run_id: str, **changes: Any) -> OptimizationRun:
         """Update the JSON payload and indexed status in one transaction."""
