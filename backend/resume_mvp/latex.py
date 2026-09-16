@@ -16,8 +16,8 @@ def build_latex(
     if template_id == "overleaf-cn":
         return _build_overleaf_latex(resume, application_type)
     compact = application_type in {"campus", "internship"} or template_id == "overleaf-cn"
-    font_size = "8pt" if compact else "11pt"
-    margin = "0.75cm" if compact else "1.6cm"
+    font_size = "9pt" if compact else "11pt"
+    margin = "1.2cm" if compact else "1.6cm"
     accent = {
         "overleaf-cn": "003E74",
         "classic-cn": "111111",

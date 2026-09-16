@@ -152,10 +152,11 @@ def _build_preview_pdf(
     template_id: str,
 ) -> tuple[bytes, int]:
     try:
-        pdf = compile_latex_to_pdf(
-            build_latex(resume, template_id, project.application_type),
-            photo_data_url=resume.basics.photo_data_url,
-        )
+        source = build_latex(resume, template_id, project.application_type)
+        if resume.basics.photo_data_url:
+            pdf = compile_latex_to_pdf(source, photo_data_url=resume.basics.photo_data_url)
+        else:
+            pdf = compile_latex_to_pdf(source)
     except PreviewConversionError as latex_error:
         # Keep DOCX as an optional compatibility path for existing installs;
         # callers still receive the clear unavailable error if both engines fail.
