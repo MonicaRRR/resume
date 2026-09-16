@@ -107,30 +107,19 @@ def _build_overleaf_latex(resume: ResumeDocument, application_type: ApplicationT
         "\\pagenumbering{gobble}",
         "\\small" if compact else "",
     ]
-    has_photo = bool(resume.basics.photo_data_url)
-    if has_photo:
-        lines.extend([
-            "\\noindent",
-            "\\begin{minipage}[t]{0.72\\textwidth}",
-            f"{{\\LARGE\\bfseries {_escape(resume.basics.name or '姓名')}}}\\\\",
-        ])
-    else:
-        lines.append(f"\\name{{{_escape(resume.basics.name or '姓名')}}}")
-    if has_photo:
+    lines.append(f"\\name{{{_escape(resume.basics.name or '姓名')}}}")
+    if resume.basics.photo_data_url:
         photo_filename = _photo_filename(resume.basics.photo_data_url)
     if resume.basics.phone.strip() or resume.basics.email.strip():
         parts = [resume.basics.phone, resume.basics.email]
         lines.append("\\basicContactInfo" + "{" + "}{".join(_escape(part) for part in parts[:2]) + "}")
     if resume.basics.target_role.value.strip():
         lines.append(_escape(resume.basics.target_role.value))
-    if has_photo:
+    if resume.basics.photo_data_url:
         lines.extend([
-            "\\end{minipage}",
-            "\\hfill",
-            "\\begin{minipage}[t]{0.22\\textwidth}",
-            f"\\IfFileExists{{{photo_filename}}}{{\\includegraphics[width=\\linewidth,height=3.2cm,keepaspectratio]{{{photo_filename}}}}}{{}}",
-            "\\end{minipage}",
-            "\\vspace{0.35cm}",
+            "\\begin{tikzpicture}[remember picture, overlay]",
+            f"  \\node[anchor=north east] at ($(current page.north east)+(-0.65cm,-0.45cm)$) {{\\IfFileExists{{{photo_filename}}}{{\\includegraphics[height=2.35cm,keepaspectratio]{{{photo_filename}}}}}{{}}}};",
+            "\\end{tikzpicture}",
         ])
     if resume.education:
         lines.append("\\logosection{\\faGraduationCap}{教育经历}")

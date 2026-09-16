@@ -170,7 +170,7 @@ def _build_preview_pdf(
 
 def _resume_for_project(project: JobProject, resume: ResumeDocument) -> ResumeDocument:
     """Keep reusable profile data separate from the role for this application."""
-    role = (project.job_analysis.role_title if project.job_analysis else "").strip() or project.title.strip()
+    role = (project.job_analysis.role_title if project.job_analysis else "").strip()
     scoped = resume.model_copy(deep=True)
     scoped.basics.target_role = SourcedText(value=role, origin="manual") if role else SourcedText()
     return scoped

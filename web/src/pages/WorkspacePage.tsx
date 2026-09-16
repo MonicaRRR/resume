@@ -517,7 +517,7 @@ export function WorkspacePage() {
             aria-label="简历批注预览挂载点"
           />
         ) : draft ? (
-          <ResumePreview projectId={id} resume={draft} templateId={project.selected_template_id} applicationType={project.application_type} targetRole={project.job_analysis?.role_title || project.title} onOverflowChange={setOverflow} />
+          <ResumePreview projectId={id} resume={draft} templateId={project.selected_template_id} applicationType={project.application_type} targetRole={project.job_analysis?.role_title || ""} onOverflowChange={setOverflow} />
         ) : (
           <div className="preview-empty"><span>A4</span><strong>简历预览将在这里出现</strong><p>先在经历库写全资料，再创建求职项目。</p></div>
         )}
