@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from resume_mvp.ai_workflows import (
     UnsupportedFactError,
     analyze_job,
+    fallback_job_requirements,
     generate_followup_questions,
     refine_patch_operation,
     suggest_resume_patch,
@@ -274,6 +275,11 @@ def get_match(project_id: str, services: AppServices = Depends(get_services)) ->
     project, version = _project_and_version(services, project_id)
     if project.job_analysis is None:
         raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
+    if not project.job_analysis.requirements:
+        repaired_analysis = project.job_analysis.model_copy(
+            update={"requirements": fallback_job_requirements(project.job_description)}
+        )
+        project = services.repository.update(project_id, job_analysis=repaired_analysis, clear_match_report=True)
     if project.match_report is not None:
         # Reconcile cached AI output with the current active resume. This
         # upgrades stale education/skill evidence after a resume edit without

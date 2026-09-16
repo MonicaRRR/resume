@@ -12,6 +12,7 @@ from resume_mvp.domain import (
     Fact,
     FollowupQuestion,
     JobAnalysis,
+    JobRequirement,
     PatchDiscussionResult,
     QuestionList,
     ResumeDocument,
@@ -47,6 +48,8 @@ async def analyze_job(
         data={"company_name": company_name, "job_description": job_description},
     )
     analysis = await _complete_with_repair(provider, prompt, JobAnalysis)
+    if not analysis.requirements:
+        analysis = analysis.model_copy(update={"requirements": fallback_job_requirements(job_description)})
     for requirement in analysis.requirements:
         # “27届应届生” conventionally means the 2026-09—2027-08 graduation
         # window when the JD does not provide a more precise date.
@@ -71,6 +74,26 @@ async def analyze_job(
         else:
             requirement.evidence_quote = "（未能在 JD 原文精确定位依据，已按语义保留为推断项）"
     return analysis
+
+
+def fallback_job_requirements(job_description: str) -> list[JobRequirement]:
+    """Keep the evidence map useful when a provider returns an empty analysis."""
+    chunks = [
+        re.sub(r"\s+", " ", chunk).strip(" -•·:：")
+        for chunk in re.split(r"[\n；;。.!！?？]", job_description)
+    ]
+    candidates: list[str] = []
+    for chunk in chunks:
+        if 4 <= len(chunk) <= 100 and chunk not in candidates:
+            candidates.append(chunk)
+        if len(candidates) >= 8:
+            break
+    if not candidates:
+        candidates = ["岗位要求与个人经历匹配"]
+    return [
+        JobRequirement(id=f"fallback-{index + 1}", text=chunk, evidence_quote=chunk, weight=1)
+        for index, chunk in enumerate(candidates)
+    ]
 
 
 def _quote_located_in_jd(quote: str, job_description: str) -> str | None:
