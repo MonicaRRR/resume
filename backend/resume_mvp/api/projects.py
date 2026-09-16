@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field, field_validator
 from resume_mvp.ai_workflows import (
     UnsupportedFactError,
     analyze_job,
-    fallback_job_requirements,
     generate_followup_questions,
     refine_patch_operation,
     suggest_resume_patch,
@@ -100,7 +99,8 @@ class PatchRefineInput(BaseModel):
 
 @router.get("", response_model=list[JobProject])
 def list_projects(services: AppServices = Depends(get_services)) -> list[JobProject]:
-    return services.repository.list()
+    projects = services.repository.list()
+    return [_clear_placeholder_analysis(project, services) for project in projects]
 
 
 @router.post("", response_model=JobProject, status_code=201)
@@ -152,7 +152,7 @@ async def create_project(body: ProjectCreate, services: AppServices = Depends(ge
 
 @router.get("/{project_id}", response_model=JobProject)
 def get_project(project_id: str, services: AppServices = Depends(get_services)) -> JobProject:
-    return _project_or_404(services, project_id)
+    return _clear_placeholder_analysis(_project_or_404(services, project_id), services)
 
 
 @router.patch("/{project_id}", response_model=JobProject)
@@ -275,11 +275,8 @@ def get_match(project_id: str, services: AppServices = Depends(get_services)) ->
     project, version = _project_and_version(services, project_id)
     if project.job_analysis is None:
         raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
-    if not project.job_analysis.requirements:
-        repaired_analysis = project.job_analysis.model_copy(
-            update={"requirements": fallback_job_requirements(project.job_description)}
-        )
-        project = services.repository.update(project_id, job_analysis=repaired_analysis, clear_match_report=True)
+    if _is_placeholder_analysis(project.job_analysis):
+        raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "当前岗位分析不是有效的 AI 分析，请重新分析职位描述"})
     if project.match_report is not None:
         # Reconcile cached AI output with the current active resume. This
         # upgrades stale education/skill evidence after a resume edit without
@@ -444,6 +441,20 @@ def _project_and_version(services: AppServices, project_id: str) -> tuple[JobPro
     if version is None:
         raise HTTPException(409, detail={"code": "RESUME_REQUIRED", "message": "请先上传或创建简历"})
     return project, version
+
+
+def _is_placeholder_analysis(analysis) -> bool:
+    if analysis is None or not analysis.requirements:
+        return True
+    return all(requirement.id.startswith("fallback-") for requirement in analysis.requirements)
+
+
+def _clear_placeholder_analysis(project: JobProject, services: AppServices) -> JobProject:
+    if not _is_placeholder_analysis(project.job_analysis):
+        return project
+    if project.job_analysis is None:
+        return project
+    return services.repository.update(project.id, clear_job_analysis=True, clear_match_report=True)
 
 
 def _provider_or_422(services: AppServices, kind: str):

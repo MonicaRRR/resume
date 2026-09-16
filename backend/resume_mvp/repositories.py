@@ -195,6 +195,7 @@ class ProjectRepository:
         match_report: MatchReport | None = None,
         selected_template_id: str | None = None,
         clear_match_report: bool = False,
+        clear_job_analysis: bool = False,
     ) -> JobProject:
         with self._sessions() as session:
             record = session.get(ProjectRecord, project_id)
@@ -210,6 +211,8 @@ class ProjectRepository:
                 record.job_description = job_description.strip()
             if job_analysis is not None:
                 record.job_analysis = job_analysis.model_dump(mode="json")
+            if clear_job_analysis:
+                record.job_analysis = None
             if match_report is not None:
                 record.match_report = match_report.model_dump(mode="json")
             if clear_match_report:
