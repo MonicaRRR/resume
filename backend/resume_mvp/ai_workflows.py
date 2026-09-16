@@ -40,6 +40,8 @@ async def analyze_job(
         task="分析中文职位描述",
         constraints=[
             "仅使用中文",
+            "必须返回完整 JSON 对象，字段必须包含 role_title、seniority、responsibilities、requirements、bonus_skills、keywords、interview_topics、written_topics",
+            "requirements 至少输出 1 项；每项必须包含 id、text、evidence_quote、weight、inferred",
             "每项岗位要求的 evidence_quote 尽量逐字摘自 JD",
             "若无法逐字摘录（概括、合并多句、措辞改写），必须设置 inferred=true，仍保留该要求，不要丢弃",
             "inferred=true 时 evidence_quote 可写最接近的原文片段；实在没有则写短说明，但不得因此省略该要求",
@@ -49,7 +51,22 @@ async def analyze_job(
     )
     analysis = await _complete_with_repair(provider, prompt, JobAnalysis)
     if not analysis.requirements:
-        analysis = analysis.model_copy(update={"requirements": fallback_job_requirements(job_description)})
+        repair_prompt = _prompt(
+            task="补全岗位分析 JSON，禁止返回空数组或空对象",
+            constraints=[
+                "必须从 JD 提取至少 1 条岗位要求",
+                "requirements 每项包含 id、text、evidence_quote、weight、inferred",
+                "只返回完整 JSON，不要解释，不要 Markdown 代码块",
+            ],
+            data={
+                "company_name": company_name,
+                "job_description": job_description,
+                "previous_analysis": analysis.model_dump(mode="json"),
+            },
+        )
+        analysis = await _complete_with_repair(provider, repair_prompt, JobAnalysis)
+    if not analysis.requirements:
+        raise ProviderFormatError("模型返回了空岗位分析，未提取出任何岗位要求", raw_response="{}")
     for requirement in analysis.requirements:
         # “27届应届生” conventionally means the 2026-09—2027-08 graduation
         # window when the JD does not provide a more precise date.

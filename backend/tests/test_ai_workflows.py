@@ -125,6 +125,28 @@ async def test_job_analysis_marks_unlocated_quote_as_inferred() -> None:
 
 
 @pytest.mark.anyio
+async def test_empty_job_analysis_is_repaired_with_explicit_requirements_contract() -> None:
+    """An empty JSON object is valid JSON but not a usable job analysis."""
+    provider = FakeProvider([JobAnalysis(), valid_analysis()])
+
+    result = await analyze_job(provider, "示例科技", "负责 Python API 与数据库优化")
+
+    assert result.requirements
+    assert len(provider.prompts) == 2
+    assert "requirements 至少输出 1 项" in provider.prompts[0]
+    assert "禁止返回空数组或空对象" in provider.prompts[1]
+
+
+@pytest.mark.anyio
+async def test_repeated_empty_job_analysis_fails_loudly() -> None:
+    """Do not persist an empty analysis after the semantic repair attempt."""
+    provider = FakeProvider([JobAnalysis(), JobAnalysis()])
+
+    with pytest.raises(ProviderFormatError, match="空岗位分析"):
+        await analyze_job(provider, "示例科技", "负责 Python API 与数据库优化")
+
+
+@pytest.mark.anyio
 async def test_invalid_structured_output_gets_one_format_repair() -> None:
     """Catches permanent failure on one malformed model response or unlimited retries."""
     provider = FakeProvider(
