@@ -102,9 +102,9 @@ def _build_overleaf_latex(resume: ResumeDocument, application_type: ApplicationT
     lines = [
         "% resume-evidence-workbench template=overleaf-cn",
         "\\documentclass{setting}",
+        "\\geometry{top=0.75cm,bottom=0.55cm,left=0.85cm,right=0.85cm}",
         "\\begin{document}",
         "\\pagenumbering{gobble}",
-        "\\geometry{top=0.75cm,bottom=0.55cm,left=0.85cm,right=0.85cm}",
         "\\small" if compact else "",
         f"\\name{{{_escape(resume.basics.name or '姓名')}}}",
     ]
