@@ -274,12 +274,28 @@ class PracticeQuestion(BaseModel):
     fact_ids: list[str] = Field(default_factory=list)
 
 
+QuestionSetSource = Literal["jd", "resume", "project"]
+
+
+class QuestionSet(BaseModel):
+    """A reusable, persisted set of practice questions for one application."""
+
+    id: str = Field(default_factory=new_id)
+    project_id: str
+    title: str
+    source_type: QuestionSetSource
+    questions: list[PracticeQuestion] = Field(default_factory=list)
+    reuse_count: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class PracticeFeedback(BaseModel):
     dimensions: dict[str, str] = Field(default_factory=dict)
     summary: str
     improved_answer: str = ""
     weaknesses: list[str] = Field(default_factory=list)
-    percentage_score: None = None
+    percentage_score: int | None = Field(default=None, ge=0, le=100)
 
 
 class PracticeEvaluation(BaseModel):
@@ -303,12 +319,22 @@ class PracticeSession(BaseModel):
     id: str = Field(default_factory=new_id)
     project_id: str
     kind: Literal["interview", "written"]
+    interview_mode: Literal["technical", "hr", "manager"] = "technical"
     status: Literal["active", "completed"] = "active"
     current_question: PracticeQuestion | None = None
     turns: list[PracticeTurn] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+class PracticeReport(BaseModel):
+    session_id: str
+    total_score: int = Field(ge=0, le=100)
+    dimensions: dict[str, int] = Field(default_factory=dict)
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
 
 
 class ResumeVersion(BaseModel):

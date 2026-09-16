@@ -9,7 +9,7 @@ from resume_mvp.domain import (
     ResumeDocument,
     utc_now,
 )
-from resume_mvp.practice import answer_practice, start_practice
+from resume_mvp.practice import answer_practice, build_practice_report, start_practice
 
 
 class PracticeProvider:
@@ -56,7 +56,7 @@ async def test_interview_feedback_uses_named_dimensions() -> None:
     turn = await answer_practice(session, "我负责重构订单接口……", provider)
 
     assert set(turn.feedback.dimensions) == {"相关性", "具体性", "证据", "结构", "表达"}
-    assert turn.feedback.percentage_score is None
+    assert turn.feedback.percentage_score is not None
     assert session.turns == [turn]
 
 
@@ -75,3 +75,24 @@ async def test_written_practice_hides_explanation_before_answer() -> None:
 
     assert session.current_question.hint == "先拆分链路耗时"
     assert session.current_question.explanation is None
+
+
+@pytest.mark.anyio
+async def test_practice_report_aggregates_completed_answers() -> None:
+    question = PracticeQuestion(category="行为题", prompt="请介绍一次协作经历")
+    evaluation = PracticeEvaluation(
+        feedback=PracticeFeedback(
+            dimensions={"结构": "清晰"},
+            summary="表达清楚",
+            percentage_score=88,
+        )
+    )
+    provider = PracticeProvider([question, evaluation])
+    session = await start_practice("interview", provider, project(), ResumeDocument.blank())
+    await answer_practice(session, "我负责推进跨团队协作并按期交付。", provider)
+
+    report = build_practice_report(session)
+
+    assert report.session_id == session.id
+    assert report.total_score == 88
+    assert report.dimensions["综合表现"] == 88

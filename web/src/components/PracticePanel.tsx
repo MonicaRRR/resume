@@ -42,6 +42,7 @@ export function PracticePanel({ session, onAnswer, busy = false, error = "" }: {
       {lastTurn && <article className="practice-feedback">
         <div className="panel-heading"><div><span className="panel-index">评</span><h2>上一题反馈</h2></div></div>
         <p className="feedback-summary">{lastTurn.feedback.summary}</p>
+        {lastTurn.feedback.percentage_score !== null && <p className="feedback-score">本题表现：{lastTurn.feedback.percentage_score} 分</p>}
         <dl>{Object.entries(lastTurn.feedback.dimensions).map(([name, detail]) => <div key={name}><dt>{name}</dt><dd>{detail}</dd></div>)}</dl>
         {lastTurn.feedback.improved_answer && <details><summary>查看更好的回答示例</summary><p>{lastTurn.feedback.improved_answer}</p></details>}
         {lastTurn.explanation && <div className="answer-explanation"><strong>参考解析</strong><p>{lastTurn.explanation}</p></div>}

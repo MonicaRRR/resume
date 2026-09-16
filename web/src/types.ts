@@ -251,6 +251,7 @@ export const ProviderSettingsSchema = z.object({
   key_storage: z.enum(["none", "memory", "keychain"]).default("none"),
   key_saved: z.boolean().default(false),
   storage_warning: z.string().optional(),
+  capabilities: z.array(z.string()).optional(),
 });
 export type ProviderSettings = z.infer<typeof ProviderSettingsSchema>;
 
@@ -279,10 +280,11 @@ const PracticeQuestionSchema = z.object({
 });
 const PracticeFeedbackSchema = z.object({
   dimensions: z.record(z.string(), z.string()), summary: z.string(), improved_answer: z.string(),
-  weaknesses: z.array(z.string()), percentage_score: z.null(),
+  weaknesses: z.array(z.string()), percentage_score: z.number().nullable(),
 });
 export const PracticeSessionSchema = z.object({
   id: z.string(), project_id: z.string(), kind: z.enum(["interview", "written"]),
+  interview_mode: z.enum(["technical", "hr", "manager"]).default("technical"),
   status: z.enum(["active", "completed"]), current_question: PracticeQuestionSchema.nullable(),
   turns: z.array(z.object({
     id: z.string(), question: PracticeQuestionSchema, answer: z.string(), feedback: PracticeFeedbackSchema,
@@ -291,6 +293,11 @@ export const PracticeSessionSchema = z.object({
   weaknesses: z.array(z.string()), created_at: z.string(), updated_at: z.string(),
 });
 export type PracticeSession = z.infer<typeof PracticeSessionSchema>;
+export const PracticeReportSchema = z.object({
+  session_id: z.string(), total_score: z.number(), dimensions: z.record(z.string(), z.number()),
+  strengths: z.array(z.string()), risks: z.array(z.string()), recommendations: z.array(z.string()),
+});
+export type PracticeReport = z.infer<typeof PracticeReportSchema>;
 
 export type ProjectCreateInput = {
   title: string;

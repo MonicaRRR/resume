@@ -16,6 +16,7 @@ const DEFAULTS: ProviderSettings = {
   codex_confirmed: false,
   key_storage: "none",
   key_saved: false,
+  capabilities: [],
 };
 
 
@@ -210,6 +211,7 @@ export function SettingsPage() {
       <header className="settings-hero"><div><span className="eyebrow">LOCAL MODEL CONNECTIONS</span><h1>选择简历助手的推理入口</h1><p>当前 MVP 支持 OpenAI 兼容 API 与本机 Codex CLI。本地 Qwen 适配接口已预留，本期暂不启用。</p></div><a href="/">完成设置</a></header>
       {message && <div className="settings-message success" role="status">{message}</div>}
       {error && <div className="settings-message error" role="alert">{error}</div>}
+      {(settings.capabilities ?? []).length > 0 && <div className="settings-message" role="status">当前入口能力：{(settings.capabilities ?? []).map((item) => item === "local" ? "本地执行" : item === "json" ? "结构化输出" : item).join(" · ")}</div>}
       <div className="provider-cards">
         <form className={`provider-card ${settings.kind === "openai-compatible" && settings.configured ? "connected" : ""}`} onSubmit={saveApi}>
           <header><span>01 / API</span><div className="provider-icon">↗</div><h2>OpenAI 兼容 API</h2><p>适用于 OpenAI、兼容网关与提供相同 Chat Completions 协议的服务。</p></header>

@@ -33,6 +33,7 @@ class ProviderPublicState:
     key_storage: str
     key_saved: bool
     storage_warning: str
+    capabilities: tuple[str, ...] = ()
 
 
 class ProviderRegistry:
@@ -122,6 +123,7 @@ class ProviderRegistry:
             key_storage=self._key_storage,
             key_saved=self._key_storage == "keychain",
             storage_warning=self._storage_warning,
+            capabilities=("json", "local") if self._kind in self._test_providers or self._kind == "codex" else ("json",),
         )
 
     def configure_openai(

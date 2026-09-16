@@ -8,6 +8,7 @@ const writtenSession: PracticeSession = {
   id: "session-1",
   project_id: "project-1",
   kind: "written",
+  interview_mode: "technical",
   status: "active",
   current_question: {
     id: "question-1",

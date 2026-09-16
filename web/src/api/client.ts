@@ -8,6 +8,7 @@ import {
   MatchReportSchema,
   OptimizationRunSchema,
   PracticeSessionSchema,
+  PracticeReportSchema,
   ProjectListSchema,
   ProjectSchema,
   ProviderSettingsSchema,
@@ -136,9 +137,10 @@ export const api = {
     body.append("file", file);
     return request("/api/profile/import", ProfileImportResultSchema, { method: "POST", body });
   },
-  createPractice: (projectId: string, kind: "interview" | "written", provider: string) => request(`/api/projects/${projectId}/practice/sessions`, PracticeSessionSchema, json("POST", { kind, provider })),
+  createPractice: (projectId: string, kind: "interview" | "written", provider: string, interview_mode: "technical" | "hr" | "manager" = "technical") => request(`/api/projects/${projectId}/practice/sessions`, PracticeSessionSchema, json("POST", { kind, provider, interview_mode })),
   getPractice: (sessionId: string) => request(`/api/practice/sessions/${sessionId}`, PracticeSessionSchema),
   answerPractice: (sessionId: string, answer: string, provider: string) => request(`/api/practice/sessions/${sessionId}/answer`, PracticeSessionSchema, json("POST", { answer, provider })),
+  getPracticeReport: (sessionId: string) => request(`/api/practice/sessions/${sessionId}/report`, PracticeReportSchema),
   getCodexHandoff: (id: string) => request(`/api/projects/${id}/codex-handoff`, z.object({ markdown: z.string() }), { method: "POST" }),
   previewPages: (
     id: string,

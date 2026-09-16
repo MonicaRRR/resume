@@ -4232,6 +4232,29 @@ select:focus-visible,
   gap: 16px;
 }
 
+.practice-report {
+  padding: 26px;
+  border-radius: var(--apple-radius-xl);
+  background: white;
+  box-shadow: var(--apple-shadow-soft);
+}
+
+.practice-report .panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.practice-report .panel-heading strong { color: var(--apple-blue); font-size: 24px; }
+.report-dimensions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.report-dimensions span { padding: 8px 12px; border-radius: var(--apple-radius); background: var(--apple-fill-secondary); color: var(--apple-secondary-label); }
+.report-dimensions b { margin-left: 8px; color: var(--apple-label); }
+.report-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.report-columns h3 { font-size: 14px; }
+.report-columns ul { margin: 8px 0 0; padding-left: 18px; color: var(--apple-secondary-label); line-height: 1.7; }
+
+@media (max-width: 700px) { .report-columns { grid-template-columns: 1fr; } }
+
 .practice-progress {
   display: grid;
   grid-template-columns: auto 1fr auto;

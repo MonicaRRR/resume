@@ -10,8 +10,8 @@ from resume_mvp.api.dependencies import (
     ProviderConfigurationError,
     get_services,
 )
-from resume_mvp.domain import PracticeSession
-from resume_mvp.practice import answer_practice, start_practice
+from resume_mvp.domain import PracticeReport, PracticeSession
+from resume_mvp.practice import answer_practice, build_practice_report, start_practice
 from resume_mvp.providers.base import ProviderError
 from resume_mvp.repositories import PracticeSessionNotFoundError, ProjectNotFoundError
 
@@ -22,6 +22,7 @@ router = APIRouter(tags=["practice"])
 class PracticeStartInput(BaseModel):
     kind: Literal["interview", "written"]
     provider: str
+    interview_mode: Literal["technical", "hr", "manager"] = "technical"
 
 
 class PracticeAnswerInput(BaseModel):
@@ -50,7 +51,7 @@ async def create_practice_session(
         raise HTTPException(409, detail={"code": "ANALYSIS_REQUIRED", "message": "请先分析职位描述"})
     provider = _provider(services, body.provider)
     try:
-        practice = await start_practice(body.kind, provider, project, version.resume)
+        practice = await start_practice(body.kind, provider, project, version.resume, body.interview_mode)
     except ProviderError as error:
         raise HTTPException(502, detail={"code": "PROVIDER_FAILED", "message": str(error)}) from error
     return services.repository.save_practice(practice)
@@ -63,6 +64,14 @@ def get_practice_session(
 ) -> PracticeSession:
     try:
         return services.repository.get_practice(session_id)
+    except PracticeSessionNotFoundError as error:
+        raise HTTPException(404, detail={"code": "PRACTICE_NOT_FOUND", "message": "训练记录不存在"}) from error
+
+
+@router.get("/api/practice/sessions/{session_id}/report", response_model=PracticeReport)
+def get_practice_report(session_id: str, services: AppServices = Depends(get_services)) -> PracticeReport:
+    try:
+        return build_practice_report(services.repository.get_practice(session_id))
     except PracticeSessionNotFoundError as error:
         raise HTTPException(404, detail={"code": "PRACTICE_NOT_FOUND", "message": "训练记录不存在"}) from error
 

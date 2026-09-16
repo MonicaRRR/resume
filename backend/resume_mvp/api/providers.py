@@ -36,6 +36,7 @@ class ProviderSettingsOutput(BaseModel):
     key_storage: str
     key_saved: bool
     storage_warning: str
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class ProviderSelection(BaseModel):
