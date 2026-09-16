@@ -78,7 +78,12 @@ class ProjectRepository:
             if record is None or not record.resume:
                 return ResumeDocument.blank(), []
             resume = ResumeDocument.model_validate(record.resume)
-            facts = [Fact.model_validate(fact) for fact in (record.facts or [])]
+            resume.basics.target_role = SourcedText()
+            facts = [
+                Fact.model_validate(fact)
+                for fact in (record.facts or [])
+                if not str(fact.get("statement", "")).startswith("期望职位：")
+            ]
             return resume, facts
 
     def save_profile(self, resume: ResumeDocument) -> tuple[ResumeDocument, list[Fact]]:
