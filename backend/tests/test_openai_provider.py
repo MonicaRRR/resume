@@ -14,10 +14,38 @@ from resume_mvp.providers.base import (
     ProviderUsage,
 )
 from resume_mvp.providers.openai_compatible import OpenAICompatibleProvider
+from resume_mvp.domain import JobAnalysis
+from resume_mvp.ai_workflows import analyze_job
 
 
 class SkillList(BaseModel):
     items: list[str]
+
+
+@pytest.mark.anyio
+async def test_job_analysis_sends_types_and_repairs_real_provider_shape_errors() -> None:
+    requests = []
+    async def handler(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        system = body['messages'][0]['content']
+        assert json.dumps(JobAnalysis.model_json_schema(), ensure_ascii=False) in system
+        payload = {
+            'role_title': '后端工程师',
+            'requirements': [{'id': 'r1', 'text': '熟悉 Python', 'evidence_quote': '熟悉 Python',
+                              'weight': '高' if len(requests) == 1 else 2, 'inferred': False}],
+            'bonus_skills': [{'text': 'SQL'}] if len(requests) == 1 else ['SQL'],
+        }
+        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(payload)}}]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = OpenAICompatibleProvider(base_url='http://model.local', api_key='secret', model='demo', client=client)
+        result = await analyze_job(provider, '公司', '熟悉 Python，SQL 加分')
+    assert result.requirements[0].weight == 2
+    assert result.bonus_skills == ['SQL']
+    assert len(requests) == 2
+    repair = requests[1]['messages'][1]['content']
+    assert 'float_parsing' in repair and 'string_type' in repair
+    assert 'validation_errors' in repair
 
 
 @pytest.mark.anyio

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,6 +25,30 @@ from resume_mvp.repositories import ProjectRepository
 class StubProvider:
     async def complete_json(self, prompt: str, schema: type):
         raise AssertionError("orchestrator tests must use injected agent hooks")
+
+
+@pytest.mark.anyio
+async def test_default_render_uses_latex_with_selected_template_and_photo(monkeypatch):
+    import resume_mvp.optimization_orchestrator as module
+    resume = ResumeDocument.blank()
+    resume.basics.photo_data_url = 'data:image/png;base64,dGVzdA=='
+    context = SimpleNamespace(template_id='overleaf-cn', application_type='campus')
+    def build(document, template, application):
+        assert document is resume
+        assert (template, application) == ('overleaf-cn', 'campus')
+        return 'latex-source'
+    def compile(source, *, photo_data_url):
+        assert source == 'latex-source'
+        assert photo_data_url == resume.basics.photo_data_url
+        return b'pdf-result'
+    def analyze(pdf, document, application):
+        assert pdf == b'pdf-result' and document is resume and application == 'campus'
+        return passing_layout()
+    monkeypatch.setattr(module, 'build_latex', build)
+    monkeypatch.setattr(module, 'compile_latex_to_pdf', compile)
+    monkeypatch.setattr(module, 'analyze_pdf_layout', analyze)
+    result = await OptimizationOrchestrator._default_render(None, context, resume)
+    assert result.page_count == 1
 
 
 def review(*, score: int = 88, requires_user_input: bool = False) -> OptimizationReview:

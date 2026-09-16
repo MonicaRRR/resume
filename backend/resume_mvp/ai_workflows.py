@@ -41,6 +41,9 @@ async def analyze_job(
             "仅使用中文",
             "必须返回完整 JSON 对象，字段必须包含 role_title、seniority、responsibilities、requirements、bonus_skills、keywords、interview_topics、written_topics",
             "requirements 至少输出 1 项；每项必须包含 id、text、evidence_quote、weight、inferred",
+            "weight 是大于 0 的数字（例如 1、2、3），不能写高/中/低；inferred 是 true/false 布尔值",
+            "responsibilities、bonus_skills、keywords、interview_topics、written_topics 均为字符串数组，不要输出对象",
+            "职位描述、工作职责、任职要求等栏目标题不是岗位要求，不得作为 requirements 条目",
             "每项岗位要求的 evidence_quote 尽量逐字摘自 JD",
             "若无法逐字摘录（概括、合并多句、措辞改写），必须设置 inferred=true，仍保留该要求，不要丢弃",
             "inferred=true 时 evidence_quote 可写最接近的原文片段；实在没有则写短说明，但不得因此省略该要求",
@@ -65,7 +68,7 @@ async def analyze_job(
         )
         analysis = await _complete_with_repair(provider, repair_prompt, JobAnalysis)
     if not analysis.requirements:
-        raise ProviderFormatError("模型返回了空岗位分析，未提取出任何岗位要求", raw_response="{}")
+        raise ProviderFormatError("模型返回了空岗位分析，未提取出任何岗位要求", raw_response=analysis.model_dump_json())
     for requirement in analysis.requirements:
         # “27届应届生” conventionally means the 2026-09—2027-08 graduation
         # window when the JD does not provide a more precise date.
@@ -820,6 +823,7 @@ async def _complete_with_repair(
             constraints=["不要解释", "不要添加 Markdown 代码块"],
             data={
                 "invalid_response": error.raw_response,
+                "validation_errors": error.validation_errors,
                 "json_schema": schema.model_json_schema(),
             },
         )

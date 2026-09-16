@@ -32,7 +32,7 @@ from resume_mvp.ingestion import ImportResult, ResumeImportError, import_resume
 from resume_mvp.matching import calculate_match
 from resume_mvp.layout_tidy import tidy_resume_for_layout
 from resume_mvp.patches import PatchConflictError, apply_resume_patch
-from resume_mvp.profile import profile_is_ready
+from resume_mvp.profile import profile_is_ready, facts_from_resume
 from resume_mvp.providers.base import ProviderError, ProviderRateLimitError
 from resume_mvp.repositories import ProjectNotFoundError, ProfileRequiredError, VersionNotFoundError
 
@@ -206,11 +206,20 @@ def save_resume(
     services: AppServices = Depends(get_services),
 ) -> ResumeVersion:
     _project_or_404(services, project_id)
+    # Education copied into a browser draft must also be available as evidence.
+    facts = list(body.facts)
+    known = {(fact.category, fact.statement) for fact in facts}
+    education_resume = ResumeDocument.blank()
+    education_resume.education = [entry.model_copy(deep=True) for entry in body.resume.education]
+    for fact in facts_from_resume(education_resume):
+        if (fact.category, fact.statement) not in known:
+            facts.append(fact)
+            known.add((fact.category, fact.statement))
     return services.repository.save_version(
         project_id,
         body.resume,
         reason=body.reason,
-        facts=body.facts,
+        facts=facts,
     )
 
 

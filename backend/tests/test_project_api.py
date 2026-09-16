@@ -161,6 +161,39 @@ def test_project_requires_nonempty_jd(tmp_path: Path) -> None:
     assert response.status_code == 422
 
 
+def test_saved_education_reaches_ai_and_has_evidence(tmp_path: Path) -> None:
+    captured = []
+    class CaptureProvider(JourneyProvider):
+        async def complete_json(self, prompt, schema):
+            if schema is MatchReport:
+                captured.append(json.loads(prompt.split("输入数据：\n", 1)[1]))
+            return await super().complete_json(prompt, schema)
+    client = TestClient(create_app(data_dir=tmp_path, test_providers={"test": CaptureProvider()}))
+    _seed_profile(client)
+    project = client.post('/api/projects', json={
+        'title': '岗位', 'company_name': '公司', 'application_type': 'campus',
+        'job_description': '负责 Python API',
+    }).json()
+    pid = project['id']
+    version = client.get(f'/api/projects/{pid}/versions').json()[0]
+    assert version['resume']['education'] == []
+    version['resume']['education'] = [{
+        'id': 'edu1', 'institution': '示例大学', 'degree': '本科', 'field': '计算机科学',
+        'start_date': '2023-09', 'end_date': '2027-06', 'highlights': [],
+    }]
+    saved = client.put(f'/api/projects/{pid}/resume', json={
+        'resume': version['resume'], 'facts': version['facts'],
+    })
+    assert saved.status_code == 200
+    assert client.post(f'/api/projects/{pid}/match', json={'provider': 'test'}).status_code == 200
+    assert captured[-1]['resume']['education'][0]['institution'] == '示例大学'
+    assert any(f['category'] == '教育经历' and '2027-06' in f['statement'] for f in captured[-1]['facts'])
+    again = client.put(f'/api/projects/{pid}/resume', json={
+        'resume': saved.json()['resume'], 'facts': saved.json()['facts'],
+    }).json()
+    assert len(again['facts']) == len(saved.json()['facts'])
+
+
 def _seed_profile(client: TestClient) -> None:
     response = client.put(
         "/api/profile",

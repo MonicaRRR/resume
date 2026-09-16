@@ -17,7 +17,7 @@ from resume_mvp.domain import (
     ResumePatch,
     ResumeVersion,
 )
-from resume_mvp.exports import build_docx
+from resume_mvp.latex import build_latex
 from resume_mvp.layout_analysis import analyze_pdf_layout
 from resume_mvp.matching import calculate_match
 from resume_mvp.optimization_agents import (
@@ -34,7 +34,7 @@ from resume_mvp.optimization_models import (
 )
 from resume_mvp.optimization_quality import evaluate_quality, should_refine
 from resume_mvp.patches import apply_resume_patch
-from resume_mvp.preview import convert_docx_to_pdf
+from resume_mvp.preview import compile_latex_to_pdf
 from resume_mvp.provider_retry import RetryingProvider
 from resume_mvp.providers.base import AIProvider
 from resume_mvp.repositories import ProjectRepository
@@ -368,8 +368,10 @@ class OptimizationOrchestrator:
         context: FrozenContext,
         resume: ResumeDocument,
     ) -> LayoutReport:
-        docx = build_docx(resume, context.template_id, context.application_type)
-        pdf = convert_docx_to_pdf(docx)
+        source = build_latex(resume, context.template_id, context.application_type)
+        pdf = await asyncio.to_thread(
+            compile_latex_to_pdf, source, photo_data_url=resume.basics.photo_data_url
+        )
         return analyze_pdf_layout(pdf, resume, context.application_type)
 
     async def _analysis_step(
@@ -421,6 +423,7 @@ class OptimizationOrchestrator:
         input_hash = self._hash(
             {
                 "kind": "baseline_render",
+                "renderer": "latex-v1",
                 "input_version_id": run.input_version_id,
                 "template_id": context.template_id,
                 "application_type": context.application_type,
@@ -499,6 +502,7 @@ class OptimizationOrchestrator:
         input_hash = self._hash(
             {
                 "kind": "render",
+                "renderer": "latex-v1",
                 "input_version_id": run.input_version_id,
                 "iteration": run.iteration,
                 "candidate": candidate.model_dump(mode="json"),

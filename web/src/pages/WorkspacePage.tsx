@@ -130,6 +130,19 @@ export function WorkspacePage() {
     ]);
   }
 
+  async function persistDraftForAI() {
+    if (!activeVersion || !draft || !profileQuery.data) throw new Error("简历与经历库正在加载，请稍后重试");
+    // The education recovery effect may not have rendered before automatic matching.
+    const resume = draft.education.length === 0 && activeVersion.resume.education.length === 0
+      && profileQuery.data?.resume.education.length
+      ? { ...draft, education: structuredClone(profileQuery.data.resume.education) }
+      : draft;
+    if (JSON.stringify(resume) === JSON.stringify(activeVersion.resume)) return;
+    const saved = await api.saveResume(id, resume, activeVersion.facts, "AI 分析前保存当前草稿");
+    setDraft(structuredClone(saved.resume));
+    await refreshResume();
+  }
+
   async function run(label: string, action: () => Promise<void>) {
     setBusy(label);
     setMessage("");
@@ -150,6 +163,7 @@ export function WorkspacePage() {
         return;
       }
       if (jd !== project?.job_description) await api.updateProject(id, { job_description: jd });
+      await persistDraftForAI();
       await api.analyzeJob(id, provider);
       await queryClient.invalidateQueries({ queryKey: ["project", id] });
       await queryClient.invalidateQueries({ queryKey: ["match", id] });
@@ -160,6 +174,7 @@ export function WorkspacePage() {
 
   async function refreshMatch() {
     await run("match", async () => {
+      await persistDraftForAI();
       await api.refreshMatch(id, provider);
       await queryClient.invalidateQueries({ queryKey: ["project", id] });
       await queryClient.invalidateQueries({ queryKey: ["match", id] });
@@ -178,17 +193,18 @@ export function WorkspacePage() {
   useEffect(() => {
     if (matchBootstrapped.current) return;
     if (stage !== "match") return;
-    if (!project?.job_analysis || !activeVersion || !providerQuery.data?.configured) return;
+    if (!project?.job_analysis || !activeVersion || !draft || !profileQuery.data || !providerQuery.data?.configured) return;
     if (project.match_report) {
       matchBootstrapped.current = true;
       return;
     }
     matchBootstrapped.current = true;
     void refreshMatch();
-  }, [stage, project, activeVersion, providerQuery.data?.configured]);
+  }, [stage, project, activeVersion, draft, profileQuery.data, providerQuery.data?.configured]);
 
   async function getFollowups() {
     await run("questions", async () => {
+      await persistDraftForAI();
       const result = await api.getQuestions(id, provider);
       setQuestions(result);
       setQuestionIndex(0);
@@ -209,6 +225,7 @@ export function WorkspacePage() {
 
   async function startOptimization(mode: OptimizationMode) {
     await run("suggest", async () => {
+      await persistDraftForAI();
       transferredRunId.current = null;
       setPatch(null);
       setStage("optimize");
@@ -308,6 +325,7 @@ export function WorkspacePage() {
 
   async function copyHandoff(download = false) {
     await run("handoff", async () => {
+      await persistDraftForAI();
       const { markdown } = await api.getCodexHandoff(id);
       if (download) {
         const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));

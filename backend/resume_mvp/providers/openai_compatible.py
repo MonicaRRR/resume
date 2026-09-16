@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import json
 import re
 from typing import TypeVar
 
@@ -59,7 +60,12 @@ class OpenAICompatibleProvider:
                     "messages": [
                         {
                             "role": "system",
-                            "content": "你是中文求职材料助手。只返回符合要求的 JSON。",
+                            "content": (
+                                "你是中文求职材料助手。只返回符合以下 JSON Schema 的 JSON 对象。"
+                                "字段名与类型必须遵守结构：number 使用数字，boolean 使用布尔值，"
+                                "字符串数组不能输出对象；自然语言内容使用中文。\n"
+                                + json.dumps(schema.model_json_schema(), ensure_ascii=False)
+                            ),
                         },
                         {"role": "user", "content": prompt},
                     ],

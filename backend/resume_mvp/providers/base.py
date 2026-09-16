@@ -39,9 +39,10 @@ class ProviderRateLimitError(ProviderError):
 
 
 class ProviderFormatError(ProviderError):
-    def __init__(self, message: str, *, raw_response: str = "") -> None:
+    def __init__(self, message: str, *, raw_response: str = "", validation_errors: list[dict] | None = None) -> None:
         super().__init__(message)
         self.raw_response = raw_response
+        self.validation_errors = validation_errors or []
 
 
 class ProviderUsage(BaseModel):
@@ -62,5 +63,10 @@ def validate_json_response(raw: str, schema: type[T]) -> T:
     try:
         payload = json.loads(candidate)
         return schema.model_validate(payload)
-    except (json.JSONDecodeError, ValidationError) as error:
+    except ValidationError as error:
+        details = [{"loc": list(item["loc"]), "type": item["type"]} for item in error.errors()]
+        raise ProviderFormatError(
+            "模型返回字段类型不符合要求", raw_response=raw, validation_errors=details
+        ) from error
+    except json.JSONDecodeError as error:
         raise ProviderFormatError("模型没有返回要求的 JSON 结构", raw_response=raw) from error
