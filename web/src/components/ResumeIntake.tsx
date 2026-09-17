@@ -3,7 +3,7 @@ import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { encodeResumePhoto } from "../lib/encodeResumePhoto";
 import { blankResume, sourcedText } from "../resume";
 import type { Fact, ResumeDocument } from "../types";
-import { AppleDateParts } from "./ui/AppleDateParts";
+import { AppleDateParts, dateRangeIsReversed, dateValueIsInvalid } from "./ui/AppleDateParts";
 import { AppleSelect } from "./ui/AppleSelect";
 
 
@@ -77,6 +77,8 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
   onCreate: (resume: ResumeDocument, facts: Fact[]) => void;
   busy?: boolean;
 }) {
+  const currentYear = new Date().getFullYear();
+  const educationMaxYear = currentYear + 10;
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"choose" | "manual">("choose");
   const [basics, setBasics] = useState({
@@ -109,6 +111,28 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    const invalidDates = (
+      dateValueIsInvalid(basics.birthday, "day", 1960, currentYear)
+      || education.some((item) => (
+        dateValueIsInvalid(item.start_date, "month", 1960, educationMaxYear)
+        || dateValueIsInvalid(item.end_date, "month", 1960, educationMaxYear)
+        || dateRangeIsReversed(item.start_date, item.end_date)
+      ))
+      || work.some((item) => (
+        dateValueIsInvalid(item.start_date, "day", 1960, currentYear)
+        || dateValueIsInvalid(item.end_date, "day", 1960, currentYear)
+        || dateRangeIsReversed(item.start_date, item.end_date)
+      ))
+      || projects.some((item) => (
+        dateValueIsInvalid(item.start_date, "day", 1960, currentYear)
+        || dateValueIsInvalid(item.end_date, "day", 1960, currentYear)
+        || dateRangeIsReversed(item.start_date, item.end_date)
+      ))
+    );
+    if (invalidDates) {
+      setError("请先修改标红的日期或时间顺序");
+      return;
+    }
     if (!basics.name.trim()) {
       setError("请填写姓名");
       return;
@@ -347,15 +371,20 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                   aria-label={`入学时间 ${index + 1}`}
                   precision="month"
                   minYear={1960}
+                  maxYear={educationMaxYear}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                   value={item.start_date}
                   onChange={(start_date) => setEducation(education.map((entry) => entry.id === item.id ? { ...entry, start_date } : entry))}
                 />
               </label>
-              <label>毕业时间
+              <label>毕业 / 预计毕业时间
                 <AppleDateParts
-                  aria-label={`毕业时间 ${index + 1}`}
+                  aria-label={`毕业或预计毕业时间 ${index + 1}`}
                   precision="month"
                   minYear={1960}
+                  maxYear={educationMaxYear}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                  errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "毕业时间不能早于入学时间" : ""}
                   value={item.end_date}
                   onChange={(end_date) => setEducation(education.map((entry) => entry.id === item.id ? { ...entry, end_date } : entry))}
                 />
@@ -388,6 +417,8 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`工作开始时间 ${index + 1}`}
                   precision="day"
+                  minYear={1960}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                   value={item.start_date}
                   onChange={(start_date) => setWork(work.map((entry) => entry.id === item.id ? { ...entry, start_date } : entry))}
                 />
@@ -396,6 +427,9 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`工作结束时间 ${index + 1}`}
                   precision="day"
+                  minYear={1960}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                  errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "结束时间不能早于开始时间" : ""}
                   value={item.end_date}
                   onChange={(end_date) => setWork(work.map((entry) => entry.id === item.id ? { ...entry, end_date } : entry))}
                 />
@@ -435,6 +469,8 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`项目开始时间 ${index + 1}`}
                   precision="day"
+                  minYear={1960}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                   value={item.start_date}
                   onChange={(start_date) => setProjects(projects.map((entry) => entry.id === item.id ? { ...entry, start_date } : entry))}
                 />
@@ -443,6 +479,9 @@ export function ResumeIntake({ onUpload, onCreate, busy = false }: {
                 <AppleDateParts
                   aria-label={`项目结束时间 ${index + 1}`}
                   precision="day"
+                  minYear={1960}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                  errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "结束时间不能早于开始时间" : ""}
                   value={item.end_date}
                   onChange={(end_date) => setProjects(projects.map((entry) => entry.id === item.id ? { ...entry, end_date } : entry))}
                 />

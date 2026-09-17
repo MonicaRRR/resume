@@ -18,6 +18,8 @@ from resume_mvp.domain import (
     ResumeVersion,
 )
 from resume_mvp.exports import build_docx
+from resume_mvp.evidence_match import analyze_evidence_match
+from resume_mvp.latex import build_latex
 from resume_mvp.layout_analysis import analyze_pdf_layout
 from resume_mvp.matching import calculate_match
 from resume_mvp.optimization_agents import (
@@ -34,7 +36,7 @@ from resume_mvp.optimization_models import (
 )
 from resume_mvp.optimization_quality import evaluate_quality, should_refine
 from resume_mvp.patches import apply_resume_patch
-from resume_mvp.preview import convert_docx_to_pdf
+from resume_mvp.preview import PreviewConversionError, compile_latex_to_pdf, convert_docx_to_pdf
 from resume_mvp.provider_retry import RetryingProvider
 from resume_mvp.providers.base import AIProvider
 from resume_mvp.repositories import ProjectRepository
@@ -96,6 +98,7 @@ class OptimizationOrchestrator:
     ) -> None:
         self.repository = repository
         self.providers = providers
+        self._uses_default_analyze = analyze_fn is None
         self._analyze_fn = analyze_fn or self._default_analyze
         self._write_fn = write_fn or self._default_write
         self._review_fn = review_fn or self._default_review
@@ -245,7 +248,9 @@ class OptimizationOrchestrator:
             self._raise_if_cancelled(run.id)
 
             if run.mode == "quick":
-                return self._finish_quick(run, patch, layout, previous_layout)
+                return self._finish_quick(
+                    run, patch, layout, previous_layout, context.application_type
+                )
 
             run = self.repository.update_optimization_run(run.id, status="reviewing")
             review = await self._review_step(
@@ -282,6 +287,7 @@ class OptimizationOrchestrator:
                     review,
                     quality,
                     previous_layout,
+                    context.application_type,
                 )
 
             run = self.repository.update_optimization_run(
@@ -319,7 +325,12 @@ class OptimizationOrchestrator:
         provider: AIProvider,
     ) -> tuple[JobAnalysis, MatchReport]:
         analysis = await analyze_job(provider, context.company_name, context.job_description)
-        match = self._match_fn(analysis, context.resume, context.facts)
+        match = await analyze_evidence_match(
+            provider,
+            analysis,
+            context.resume,
+            context.facts,
+        )
         return analysis, match
 
     async def _default_write(
@@ -368,8 +379,12 @@ class OptimizationOrchestrator:
         context: FrozenContext,
         resume: ResumeDocument,
     ) -> LayoutReport:
-        docx = build_docx(resume, context.template_id, context.application_type)
-        pdf = convert_docx_to_pdf(docx)
+        try:
+            source = build_latex(resume, context.template_id, context.application_type)
+            pdf = compile_latex_to_pdf(source)
+        except PreviewConversionError:
+            docx = build_docx(resume, context.template_id, context.application_type)
+            pdf = convert_docx_to_pdf(docx)
         return analyze_pdf_layout(pdf, resume, context.application_type)
 
     async def _analysis_step(
@@ -394,7 +409,10 @@ class OptimizationOrchestrator:
             match = MatchReport.model_validate(cached["match"])
             return analysis, match
 
-        run = await self._consume_budget(run, calls=1)
+        # The default analysis performs one JD extraction call and one evidence
+        # adjudication call. Injected test/offline analyzers retain their own
+        # single-call contract.
+        run = await self._consume_budget(run, calls=2 if self._uses_default_analyze else 1)
         analysis, match = await self._analyze_fn(run, context, provider)
         self.repository.update(
             context.project_id,
@@ -656,16 +674,22 @@ class OptimizationOrchestrator:
         patch: ResumePatch,
         layout: LayoutReport,
         baseline: LayoutReport,
+        application_type: ApplicationType,
     ) -> OptimizationRun:
+        overflow = application_type in {"campus", "internship"} and layout.page_count > 1
         return self.repository.update_optimization_run(
             run.id,
-            status="ready_for_user",
+            status="waiting_for_user" if overflow else "ready_for_user",
             patch=patch,
             layout_report=layout,
             baseline_layout_report=baseline,
             review=None,
             quality=None,
-            message="快速优化已完成，请逐条确认修改",
+            message=(
+                f"快速优化结果仍有 {layout.page_count} 页；校招/实习必须压到一页，请改用深度优化继续压缩"
+                if overflow
+                else "快速优化已完成，请逐条确认修改"
+            ),
         )
 
     def _finish_ready(
@@ -696,17 +720,26 @@ class OptimizationOrchestrator:
         review: OptimizationReview,
         quality: QualityGateResult,
         baseline: LayoutReport,
+        application_type: ApplicationType,
     ) -> OptimizationRun:
         reasons = "；".join(quality.reasons) if quality.reasons else "未继续改善"
+        hard_page_failure = (
+            application_type in {"campus", "internship"}
+            and not quality.page_policy_passed
+        )
         return self.repository.update_optimization_run(
             run.id,
-            status="ready_for_user",
+            status="waiting_for_user" if hard_page_failure else "ready_for_user",
             patch=patch,
             layout_report=layout,
             baseline_layout_report=baseline,
             review=review,
             quality=quality,
-            message=f"已停止自动返工：{reasons}",
+            message=(
+                f"仍未满足一页硬约束，不能完成优化：{reasons}"
+                if hard_page_failure
+                else f"已停止自动返工：{reasons}"
+            ),
         )
 
     def _finish_waiting(

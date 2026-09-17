@@ -500,6 +500,38 @@ select:focus-visible,
   box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.22);
 }
 
+.apple-date-parts.is-invalid .apple-date-field input,
+.apple-date-field input[aria-invalid="true"] {
+  color: var(--apple-red);
+  background: var(--apple-red-bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 59, 48, 0.45);
+}
+
+.apple-date-parts.is-invalid .apple-date-field input:focus,
+.apple-date-field input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2);
+}
+
+.apple-date-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--apple-red);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.editor-validation-error {
+  margin: 12px 0 8px;
+  padding: 10px 12px;
+  border-radius: var(--apple-radius);
+  color: var(--apple-red);
+  background: var(--apple-red-bg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .apple-date-field input:disabled {
   opacity: 0.45;
 }

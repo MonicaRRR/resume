@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Mapping
 from fastapi import Request
 
 from resume_mvp.provider_store import load_provider_settings, save_provider_settings
-from resume_mvp.providers import AIProvider, CodexProvider, OpenAICompatibleProvider
+from resume_mvp.providers import AIProvider, CodexProvider, OpenAICompatibleProvider, RulesProvider
 from resume_mvp.repositories import ProjectRepository
 from resume_mvp.secret_store import SecretStore, provider_key_account
 
@@ -47,7 +47,7 @@ class ProviderRegistry:
         self._test_providers = dict(test_providers or {})
         self._persist_path = persist_path
         self._secret_store = secret_store
-        self._kind = default_test_kind if default_test_kind in self._test_providers else ""
+        self._kind = default_test_kind if default_test_kind in self._test_providers else "rules"
         self._preferred_kind = self._kind
         self._base_url = ""
         self._api_key = ""
@@ -88,8 +88,11 @@ class ProviderRegistry:
                 self._key_account = account
                 self._key_storage = "keychain"
                 self._kind = "openai-compatible"
+        elif kind == "rules":
+            self._kind = "rules"
         else:
-            self._kind = ""
+            self._kind = "rules"
+            self._preferred_kind = "rules"
 
     def _persist(self) -> None:
         if self._persist_path is None or self._kind in self._test_providers:
@@ -107,7 +110,7 @@ class ProviderRegistry:
         )
 
     def public_state(self) -> ProviderPublicState:
-        configured = self._kind in self._test_providers or (
+        configured = self._kind == "rules" or self._kind in self._test_providers or (
             self._kind == "openai-compatible"
             and bool(self._base_url and self._api_key and self._model)
         ) or (self._kind == "codex" and self._codex_confirmed)
@@ -219,7 +222,8 @@ class ProviderRegistry:
         self._key_storage = "none"
         self._storage_warning = ""
         if self._kind == "openai-compatible":
-            self._kind = ""
+            self._kind = "rules"
+            self._preferred_kind = "rules"
         self._persist()
         return self.public_state()
 
@@ -240,9 +244,24 @@ class ProviderRegistry:
         self._persist()
         return self.public_state()
 
+    def configure_rules(self) -> ProviderPublicState:
+        self._kind = "rules"
+        self._preferred_kind = "rules"
+        self._base_url = ""
+        self._api_key = ""
+        self._model = ""
+        self._codex_confirmed = False
+        self._key_account = ""
+        self._key_storage = "none"
+        self._storage_warning = ""
+        self._persist()
+        return self.public_state()
+
     def resolve(self, kind: str) -> AIProvider:
         if kind in self._test_providers:
             return self._test_providers[kind]
+        if kind == "rules":
+            return RulesProvider()
         if kind == "openai-compatible":
             if not (self._base_url and self._api_key and self._model):
                 raise ProviderConfigurationError("PROVIDER_NOT_CONFIGURED", "API 模型尚未配置")

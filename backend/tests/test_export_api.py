@@ -90,8 +90,8 @@ def test_export_routes_return_reopenable_files_and_handoff(tmp_path: Path) -> No
     assert "不得虚构事实" in handoff.json()["markdown"]
 
 
-def test_campus_docx_export_allowed_when_content_exceeds_one_page(tmp_path: Path) -> None:
-    """Campus overflow is a soft warning; export must still succeed."""
+def test_campus_docx_export_blocked_when_content_exceeds_one_page(tmp_path: Path) -> None:
+    """Campus overflow is a hard constraint; export must wait for compaction."""
     client = _client(tmp_path)
     _seed_profile(client)
     project = client.post(
@@ -111,10 +111,8 @@ def test_campus_docx_export_allowed_when_content_exceeds_one_page(tmp_path: Path
 
     response = client.post(f"/api/projects/{project['id']}/export/docx")
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith(
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PAGE_LIMIT_EXCEEDED"
 
 
 def test_docx_export_uses_live_draft_basics(tmp_path: Path) -> None:

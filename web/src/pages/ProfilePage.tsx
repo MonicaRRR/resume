@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, ApiError } from "../api/client";
+import { api, ApiError, downloadFile } from "../api/client";
 import { ResumeEditor } from "../components/ResumeEditor";
 import { blankResume } from "../resume";
 import type { ResumeDocument } from "../types";
@@ -106,19 +106,29 @@ export function ProfilePage() {
       )}
       <div className={`provider-card ${profileQuery.data?.ready ? "connected" : ""}`} style={{ minHeight: "auto" }}>
         <div className="profile-import-bar">
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-          >
-            {importResume.isPending ? "正在解析…" : "上传已有简历"}
-          </button>
+          <div className="button-row">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy}
+              onClick={() => fileRef.current?.click()}
+            >
+              {importResume.isPending ? "正在解析…" : "上传已有简历 / 备份"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void downloadFile("/api/profile/export/json", "个人经历库.json")}
+            >
+              导出经历库 JSON
+            </button>
+          </div>
           <input
             ref={fileRef}
             className="visually-hidden"
             type="file"
-            accept=".docx,.pdf,.txt"
+            accept=".json,.docx,.pdf,.txt,application/json"
             aria-label="上传已有简历"
             disabled={busy}
             onChange={(event) => {
@@ -126,7 +136,7 @@ export function ProfilePage() {
               if (file) onPickFile(file);
             }}
           />
-          <p className="privacy-note">支持 PDF / DOCX / TXT（≤10 MiB）。导入只填入草稿，需点保存后才会写入经历库。</p>
+          <p className="privacy-note">支持经历库 JSON 备份及 PDF / DOCX / TXT（≤10 MiB）。导入只填入草稿，需点保存后才会写入经历库。</p>
         </div>
         <ResumeEditor
           resume={draft}

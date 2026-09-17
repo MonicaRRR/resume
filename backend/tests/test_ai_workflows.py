@@ -8,6 +8,7 @@ from resume_mvp.ai_workflows import (
     suggest_resume_patch,
 )
 from resume_mvp.domain import (
+    EducationEntry,
     Fact,
     FollowupQuestion,
     JobAnalysis,
@@ -158,6 +159,52 @@ async def test_followup_questions_are_limited_deduplicated_and_private() -> None
     assert len({question.topic for question in result}) == 5
     assert "private@example.com" not in provider.prompts[0]
     assert "13800000000" not in provider.prompts[0]
+
+
+@pytest.mark.anyio
+async def test_followups_skip_cohort_requirement_with_sufficient_evidence() -> None:
+    resume = ResumeDocument.blank()
+    resume.education = [EducationEntry(
+        institution="示例大学",
+        degree="硕士",
+        field="人工智能",
+        start_date="2024-09",
+        end_date="2026-10",
+    )]
+    analysis = JobAnalysis(requirements=[
+        JobRequirement(
+            id="grad",
+            text="2027届本科及以上，计算机相关专业",
+            evidence_quote="2027届本科及以上",
+            weight=2,
+        ),
+        JobRequirement(
+            id="testing",
+            text="具备自动化测试实践",
+            evidence_quote="自动化测试",
+            weight=1,
+        ),
+    ])
+    provider = FakeProvider([QuestionList(items=[
+        FollowupQuestion(
+            id="ask-grad",
+            question="你是否属于2027届？",
+            topic="校招资格",
+            requirement_id="grad",
+        ),
+        FollowupQuestion(
+            id="ask-testing",
+            question="你做过哪些自动化测试？",
+            topic="自动化测试",
+            requirement_id="testing",
+        ),
+    ])])
+
+    result = await generate_followup_questions(provider, analysis, resume, facts=[])
+
+    assert "ask-grad" not in [question.id for question in result]
+    assert "ask-testing" in [question.id for question in result]
+    assert "evidence_status" in provider.prompts[0]
 
 
 @pytest.mark.anyio

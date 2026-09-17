@@ -41,7 +41,9 @@ class ExportDocxInput(BaseModel):
 def export_latex(project_id: str, body: ExportDocxInput = Body(default_factory=ExportDocxInput), services: AppServices = Depends(get_services)) -> Response:
     project, version = _active(services, project_id)
     resume = body.resume or version.resume
-    source = build_latex(resume, body.template_id or project.selected_template_id, project.application_type)
+    template_id = body.template_id or project.selected_template_id
+    _enforce_one_page_export(project, resume, template_id)
+    source = build_latex(resume, template_id, project.application_type)
     return Response(source.encode("utf-8"), media_type="application/x-tex; charset=utf-8", headers={"Content-Disposition": _attachment(f"{project.title}.tex")})
 
 
@@ -60,6 +62,7 @@ def export_docx(
     project, version = _active(services, project_id)
     resume = body.resume or version.resume
     template_id = body.template_id or project.selected_template_id
+    _enforce_one_page_export(project, resume, template_id)
     try:
         content = build_docx(resume, template_id, project.application_type)
     except Exception as error:
@@ -162,6 +165,33 @@ def _build_preview_pdf(
         except PreviewConversionError:
             raise latex_error
     return pdf, count_pdf_pages(pdf)
+
+
+def _enforce_one_page_export(
+    project: JobProject,
+    resume: ResumeDocument,
+    template_id: str,
+) -> None:
+    if project.application_type not in {"campus", "internship"}:
+        return
+    try:
+        _, pages = _build_preview_pdf(project, resume, template_id)
+    except PreviewConversionError as error:
+        raise HTTPException(
+            503,
+            detail={
+                "code": "PAGE_POLICY_CHECK_UNAVAILABLE",
+                "message": "无法验证一页限制，暂不导出：" + str(error),
+            },
+        ) from error
+    if pages > 1:
+        raise HTTPException(
+            409,
+            detail={
+                "code": "PAGE_LIMIT_EXCEEDED",
+                "message": f"校招/实习简历必须为一页；当前为 {pages} 页，请先精简",
+            },
+        )
 
 
 def _active(services: AppServices, project_id: str) -> tuple[JobProject, ResumeVersion]:

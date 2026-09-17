@@ -32,6 +32,7 @@ from resume_mvp.ingestion import ImportResult, ResumeImportError, import_resume
 from resume_mvp.matching import calculate_match
 from resume_mvp.layout_tidy import tidy_resume_for_layout
 from resume_mvp.patches import PatchConflictError, apply_resume_patch
+from resume_mvp.preview import PreviewConversionError
 from resume_mvp.profile import profile_is_ready
 from resume_mvp.providers.base import ProviderError, ProviderRateLimitError
 from resume_mvp.repositories import ProjectNotFoundError, ProfileRequiredError, VersionNotFoundError
@@ -334,7 +335,7 @@ def create_fact(
     body: FactCreate,
     services: AppServices = Depends(get_services),
 ) -> ResumeVersion:
-    _, version = _project_and_version(services, project_id)
+    project, version = _project_and_version(services, project_id)
     fact = Fact(**body.model_dump())
     return services.repository.save_version(
         project_id,
@@ -417,6 +418,27 @@ def apply_patch(
         raise HTTPException(409, detail={"code": "PATCH_CONFLICT", "message": str(error)}) from error
     except ValueError as error:
         raise HTTPException(422, detail={"code": "PATCH_INVALID", "message": str(error)}) from error
+    if project.application_type in {"campus", "internship"}:
+        from resume_mvp.api.exports import _build_preview_pdf
+
+        try:
+            _, page_count = _build_preview_pdf(project, updated, project.selected_template_id)
+        except PreviewConversionError as error:
+            raise HTTPException(
+                503,
+                detail={
+                    "code": "PAGE_POLICY_CHECK_UNAVAILABLE",
+                    "message": "无法验证一页限制，暂不应用修改：" + str(error),
+                },
+            ) from error
+        if page_count > 1:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "PAGE_LIMIT_EXCEEDED",
+                    "message": f"校招/实习简历必须为一页；当前修改后仍为 {page_count} 页，请继续精简",
+                },
+            )
     return services.repository.save_version(
         project_id,
         updated,

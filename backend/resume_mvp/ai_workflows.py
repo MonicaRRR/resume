@@ -36,13 +36,16 @@ async def analyze_job(
     job_description: str,
 ) -> JobAnalysis:
     prompt = _prompt(
-        task="分析中文职位描述",
+        task="分析中文职位描述，提取岗位要求、关键词和加分项",
         constraints=[
             "仅使用中文",
             "每项岗位要求的 evidence_quote 尽量逐字摘自 JD",
             "若无法逐字摘录（概括、合并多句、措辞改写），必须设置 inferred=true，仍保留该要求，不要丢弃",
             "inferred=true 时 evidence_quote 可写最接近的原文片段；实在没有则写短说明，但不得因此省略该要求",
             "不要加入 JD 中完全不存在的任职条件；能从 JD 合理读出的优先项/加分项应保留并标 inferred",
+            "将复合要求拆成可独立核验的原子要求；学历、毕业时间、专业、工作年限和具体技能分别成项，不得让其中一项命中替代另一项",
+            "原文中的‘任一/或’选项保持为同一个 OR 要求；只有同时满足的条件才拆成多个要求",
+            "届别若无特殊说明，按自然招聘届解释：N 届对应上一年 9 月至 N 年 8 月毕业（例如 2027 届为 2026-09 至 2027-08）；JD 明确给出其他区间时以原文为准",
         ],
         data={"company_name": company_name, "job_description": job_description},
     )
@@ -95,13 +98,25 @@ async def generate_followup_questions(
     facts: list[Fact],
     application_type: ApplicationType = "experienced",
 ) -> list[FollowupQuestion]:
+    from resume_mvp.matching import calculate_match
+
     inventory = _experience_inventory(resume)
+    rule_match = calculate_match(analysis, resume, facts)
+    evidence_status = {
+        item.requirement_id: item.status
+        for item in rule_match.items
+    }
+    sufficiently_grounded = {
+        requirement_id
+        for requirement_id, status in evidence_status.items()
+        if status == "已有证据"
+    }
     thin_projects = inventory["project_count"] <= 2
     campus_like = application_type in {"campus", "internship"}
     if campus_like:
         guidance_hint = (
             "guidance 用 2–4 条短提示帮助回忆（课程设计、实验室、比赛、个人工具、开源贡献、助研等），"
-            "写成可勾选的线索，不要编造用户做过"
+            "写成可勾选的线索，可以适当优化，但不要编造用户做过"
         )
         thin_hint = (
             "当前项目经历偏少：至少一半问题应询问是否还有与 JD 关键词相关的项目/课程/比赛经历，"
@@ -128,6 +143,7 @@ async def generate_followup_questions(
             "优先询问职责边界、方法、规模和可量化结果",
             "把追问当作与用户的讨论：说明为何与当前 JD 相关",
             "每个问题均可跳过",
+            "不要追问 evidence_status 已标为「已有证据」的要求；只追问「证据较弱」或「没有证据」的真实缺口",
             guidance_hint,
             thin_hint,
         ],
@@ -138,6 +154,7 @@ async def generate_followup_questions(
             "facts": [fact.model_dump(mode="json") for fact in facts],
             "project_coverage": "thin" if thin_projects else "ok",
             "application_type": application_type,
+            "evidence_status": evidence_status,
         },
     )
     response = await _complete_with_repair(provider, prompt, QuestionList)
@@ -150,6 +167,8 @@ async def generate_followup_questions(
     result: list[FollowupQuestion] = []
     seen: set[str] = set()
     for question in ordered:
+        if question.requirement_id in sufficiently_grounded:
+            continue
         key = _normalized_topic(question.topic)
         if not key or key in seen:
             continue
@@ -170,8 +189,8 @@ async def suggest_resume_patch(
     application_type: ApplicationType = "experienced",
 ) -> ResumePatch:
     page_constraint = (
-        "校招/实习优先压到一页，但不得为压页把项目删到太空：素材够时通常保留 2–3 个最相关项目；"
-        "优先按 JD 改写 bullets 与排序，只有明显弱相关且删后仍够密时才建议移出；删减须用户勾选同意。"
+        "校招/实习投递版必须且只能有一页，这是硬约束；应按 JD 只保留最强证据，压缩重复内容并移出弱相关章节；"
+        "素材多时通常保留 1–2 段最相关实习/工作和 1–3 个最相关项目，不得为了保留数量导致超页；删减须用户勾选同意。"
         if application_type in {"campus", "internship"}
         else "社招允许自然分页；按 JD 相关性排序与改写，弱相关可后移或移出，须用户同意；勿过度删减导致版面空疏。"
     )
@@ -207,6 +226,7 @@ async def suggest_resume_patch(
             "若 work_experience 数量 ≥ 2：可再给排序或弱相关压缩；优先改写高相关，而非只润色无关措辞或盲目删段",
             "若 projects 数量 ≥ 1：必须至少输出一条针对项目 bullets（如 /projects/0/bullets）的 JD 适配改写，突出岗位匹配点，不得编造新成果",
             "若 projects 数量 ≥ 3：可另给一条 /projects 排序或轻度筛选建议；projects ≤ 2 时禁止建议整段移出项目，应全部保留并加强改写",
+            "过于久远的经历（如 5 年前的实习或 10 年前的项目）若与 JD 相关性低：可建议后移或删减，但禁止直接改写成虚构的近期经历",
             "禁止“有什么写什么”：弱相关项目不要只做同义润色；要么改写成突出可迁移能力，要么明确建议缩短/后移",
             "若专业技能过短（如仅 Python/SQL）：应建议按类别拆成多条 items（每条一行），类别名用「后端/数据/工具」等，不要再生成空的「技能」分组，也不要在组名里重复「专业技能」",
             "技能 after 结构：优先一个分组 name=专业技能，items 为 2–5 条充实要点（每条 ≥ 半行，如「后端：Python、FastAPI、PostgreSQL」）；禁止多个空 SkillGroup，禁止把三点挤成 items 里的一句话却仍只占视觉一行的含糊写法",
@@ -225,16 +245,16 @@ async def suggest_resume_patch(
             "若用户原文含 LaTeX/排版残留（如 \\item、\\textbf{}、90/\\%、90/%、多余的 \\{}、\\\\），在 after 中清理为通顺中文与正常百分号（如 90%）",
             "经历描述若本是分点，after 用多条 bullets 或在 value 内用换行分点，不要揉成难读的一整段；高相关项目建议 2–4 条充实 bullets",
             "注意版面密度：避免一行只有几个字的空疏排版；过短条目应合并进相邻句、并入同类 bullets，或删去无信息填充，而不是单独占一行",
-            "技能/亮点若过碎（如单独一行「Python」），应合并为「语言：Python、…」类紧凑写法；合并时只能使用已有事实，不得编造",
+            "技能/亮点若过碎（如单独一行「Python」），应进行合并和拓展，例如「编程：精通Python、…」；必须要通过分析用户经历撰写，且合并时只能使用已有事实，不得编造",
             "润色时兼顾可读性与版面：句子宜充实到约占半行以上；过短则合并或基于已有事实扩写场景，禁止为填版面而灌水",
             "除非 reason 明确写「建议移出/删除/不放入投递版」，否则不得把原本有实质内容的字段改成空字符串或空列表",
             "每条建议必须互不重复：同一 path 只出现一次；不要同时改父路径与子路径（如 /work_experience/0 与 /work_experience/0/bullets）",
             "不要对同一段经历给出多条同义改写；若只需润色一次，合并为一条",
             "before 与 after 文本实质相同的无效建议不要输出",
-            "建议数量通常 6–12 条：首轮应覆盖技能/实习/项目等有内容章节的实质适配，不要因「精炼」只给两三条；仍禁止同义重复与空操作",
+            "建议数量通常 8–20 条：首轮应覆盖技能/实习/项目等有内容章节的实质适配，不要因「精炼」只给两三条；仍禁止同义重复与空操作",
             *ask_constraints,
             "experience_asks 不算改稿：不要把虚构项目写进 operations；只提问帮助用户补充素材",
-            "不要修改姓名、性别、生日、电话、邮箱、微信、政治面貌或证件照",
+            "不要修改姓名、性别、生日、电话、邮箱、微信、政治面貌、证件照、教育经历等基本信息；这些字段不在 JD 适配范围内",
             "不要自动应用任何修改——输出仅供用户审阅勾选",
             page_constraint,
         ],

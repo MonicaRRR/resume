@@ -117,6 +117,18 @@ export function WorkspacePage() {
     );
   }, [optimization.run]);
 
+  useEffect(() => {
+    const asks = optimization.run?.patch?.experience_asks ?? [];
+    if (!asks.length || questions.length) return;
+    setQuestions(asks.map((ask) => ({
+      id: ask.id,
+      question: ask.question,
+      topic: ask.topic,
+      guidance: ask.guidance,
+    })));
+    setQuestionIndex(0);
+  }, [optimization.run?.id, optimization.run?.patch?.experience_asks, questions.length]);
+
   const recommendation = useMemo(
     () => draft ? recommendTemplate(draft, project?.job_analysis ?? null) : null,
     [draft, project?.job_analysis],
@@ -488,13 +500,13 @@ export function WorkspacePage() {
             </>}
 
             {stage === "export" && <section className="export-panel">
-              <div className="panel-heading"><div><span className="panel-index">05</span><h2>本地导出</h2></div><span>可导出</span></div>
-              {overflow && <div className="overflow-warning"><strong>当前超过 1 页</strong><span>仍可导出 Word / PDF；校招/实习投递时建议再精简。</span></div>}
+              <div className="panel-heading"><div><span className="panel-index">05</span><h2>本地导出</h2></div><span>{overflow ? "需先压到一页" : "可导出"}</span></div>
+              {overflow && <div className="overflow-warning"><strong>当前超过 1 页</strong><span>校招/实习只能导出一页简历；请先返回编辑或建议确认继续精简。</span></div>}
               <p className="panel-note">现在可以分别下载 <strong>LaTeX 源文件（.tex）</strong> 和 <strong>PDF</strong>；Word（DOCX）仍作为兼容格式保留。</p>
               <div className="export-grid">
-                <button onClick={() => draft && void downloadDraftDocx(id, draft, project.selected_template_id, `${project.title}.docx`)} disabled={!draft}><span>DOCX</span><strong>下载 Word 简历</strong><small>与右侧预览同源，含当前基础信息</small></button>
-                <button onClick={() => draft && void downloadDraftLatex(id, draft, project.selected_template_id, `${project.title}.tex`)} disabled={!draft}><span>TEX</span><strong>下载 LaTeX 源文件</strong><small>适合继续自定义排版</small></button>
-                <button onClick={() => draft && void downloadPreviewPdf(id, draft, project.selected_template_id, `${project.title}.pdf`)} disabled={!draft}><span>PDF</span><strong>下载 PDF 预览稿</strong><small>与右侧预览同源排版</small></button>
+                <button onClick={() => draft && void downloadDraftDocx(id, draft, project.selected_template_id, `${project.title}.docx`)} disabled={!draft || overflow}><span>DOCX</span><strong>下载 Word 简历</strong><small>{overflow ? "超过一页，需先精简" : "与右侧预览同源，含当前基础信息"}</small></button>
+                <button onClick={() => draft && void downloadDraftLatex(id, draft, project.selected_template_id, `${project.title}.tex`)} disabled={!draft || overflow}><span>TEX</span><strong>下载 LaTeX 源文件</strong><small>{overflow ? "超过一页，需先精简" : "适合继续自定义排版"}</small></button>
+                <button onClick={() => draft && void downloadPreviewPdf(id, draft, project.selected_template_id, `${project.title}.pdf`)} disabled={!draft || overflow}><span>PDF</span><strong>下载 PDF 预览稿</strong><small>{overflow ? "超过一页，需先精简" : "与右侧预览同源排版"}</small></button>
                 <button onClick={() => downloadFile(`/api/projects/${id}/export/json`, `${project.title}.json`)}><span>JSON</span><strong>下载结构化简历</strong><small>不包含模型密钥</small></button>
                 <button onClick={() => copyHandoff(false)}><span>CODEX</span><strong>复制 Codex 上下文</strong><small>交给 Codex 聊天继续优化</small></button>
                 <button onClick={() => copyHandoff(true)}><span>MD</span><strong>下载 Codex 上下文</strong><small>仅供 AI 协作，非投递稿</small></button>

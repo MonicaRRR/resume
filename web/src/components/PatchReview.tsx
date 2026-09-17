@@ -89,6 +89,13 @@ export function PatchReview({
 
   const quality = optimization?.quality ?? null;
   const qualityFailed = Boolean(quality && !quality.passed);
+  const hardPageBlocked = (
+    (applicationType === "campus" || applicationType === "internship")
+    && (
+      quality?.page_policy_passed === false
+      || (optimization?.layout_report?.page_count ?? 1) > 1
+    )
+  );
 
   function acceptOperation(operationId: string) {
     setSelected((prev) => new Set(prev).add(operationId));
@@ -227,6 +234,12 @@ export function PatchReview({
         </p>
       ) : null}
 
+      {hardPageBlocked && (
+        <div className="optimization-stopped-alert" role="alert">
+          当前结果仍超过一页。校招/实习的一页限制是硬约束，暂不能应用；请继续压缩或移出弱相关内容。
+        </div>
+      )}
+
       {asksBlock}
 
       {previewHost ? createPortal(board, previewHost) : board}
@@ -244,7 +257,7 @@ export function PatchReview({
         <button
           className="primary-button"
           type="button"
-          disabled={selected.size === 0 || !agreed || busy || discussBusy}
+          disabled={selected.size === 0 || !agreed || busy || discussBusy || hardPageBlocked}
           onClick={() => onApply([...selected])}
         >
           应用已同意的修改（{selected.size}）

@@ -6,7 +6,7 @@ install:
 
 dev:
 	@trap 'kill 0' INT TERM EXIT; \
-	(cd backend && uv run uvicorn resume_mvp.main:app --host 127.0.0.1 --port 8000 --reload) & \
+	(cd backend && UV_CACHE_DIR="$(CURDIR)/.uv-cache" uv run uvicorn resume_mvp.main:app --host 127.0.0.1 --port 8000 --reload) & \
 	(cd web && pnpm dev) & \
 	wait
 

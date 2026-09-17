@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import json
+from urllib.parse import quote
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from resume_mvp.api.dependencies import AppServices, get_services
@@ -26,6 +29,24 @@ class ProfileSaveInput(BaseModel):
 def get_profile(services: AppServices = Depends(get_services)) -> ProfilePayload:
     resume, facts = services.repository.get_profile()
     return ProfilePayload(resume=resume, facts=facts, ready=profile_is_ready(resume))
+
+
+@router.get("/export/json")
+def export_profile_json(services: AppServices = Depends(get_services)) -> Response:
+    """Download a portable, versioned backup of the complete experience library."""
+    resume, facts = services.repository.get_profile()
+    payload = {
+        "schema_version": 1,
+        "resume": resume.model_dump(mode="json"),
+        "facts": [fact.model_dump(mode="json") for fact in facts],
+        "ready": profile_is_ready(resume),
+    }
+    filename = quote("个人经历库.json")
+    return Response(
+        json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
 
 
 @router.put("", response_model=ProfilePayload)

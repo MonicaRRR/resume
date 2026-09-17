@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from resume_mvp.api.autofill import router as autofill_router
 from resume_mvp.api.dependencies import AppServices, ProviderRegistry
@@ -13,6 +14,7 @@ from resume_mvp.api.practice import router as practice_router
 from resume_mvp.api.profile import router as profile_router
 from resume_mvp.api.projects import router as projects_router
 from resume_mvp.api.providers import router as providers_router
+from resume_mvp.api.timeline import router as timeline_router
 from resume_mvp.config import settings
 from resume_mvp.database import create_database
 from resume_mvp.optimization_orchestrator import OptimizationOrchestrator
@@ -71,6 +73,11 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "resume-mvp"}
 
+    @app.get("/", include_in_schema=False)
+    def frontend() -> RedirectResponse:
+        """Avoid a confusing 404 when the backend port is opened directly."""
+        return RedirectResponse("http://127.0.0.1:5173/", status_code=307)
+
     app.include_router(projects_router)
     app.include_router(optimization_router)
     app.include_router(profile_router)
@@ -78,6 +85,7 @@ def create_app(
     app.include_router(providers_router)
     app.include_router(exports_router)
     app.include_router(practice_router)
+    app.include_router(timeline_router)
     return app
 
 

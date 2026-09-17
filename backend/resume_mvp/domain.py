@@ -272,6 +272,14 @@ class PracticeQuestion(BaseModel):
     explanation: str | None = None
     requirement_ids: list[str] = Field(default_factory=list)
     fact_ids: list[str] = Field(default_factory=list)
+    answer_points: list[str] = Field(default_factory=list)
+    dimensions: list[str] = Field(default_factory=list)
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    follow_up: str = ""
+
+
+class PracticeQuestionList(BaseModel):
+    items: list[PracticeQuestion] = Field(default_factory=list)
 
 
 class PracticeFeedback(BaseModel):
@@ -307,8 +315,64 @@ class PracticeSession(BaseModel):
     current_question: PracticeQuestion | None = None
     turns: list[PracticeTurn] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
+    question_set_id: str | None = None
+    pending_questions: list[PracticeQuestion] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+QuestionSetSource = Literal["fixed", "rules", "ai", "mixed"]
+
+
+class QuestionSet(BaseModel):
+    """Reusable practice configuration; it contains no candidate answers."""
+
+    id: str = Field(default_factory=new_id)
+    project_id: str | None = None
+    title: str = Field(default="", max_length=200)
+    name: str = Field(default="", max_length=200)
+    description: str = ""
+    kind: Literal["interview", "written"] = "interview"
+    source: QuestionSetSource = "fixed"
+    questions: list[PracticeQuestion] = Field(default_factory=list)
+    rules: dict[str, Any] = Field(default_factory=dict)
+    question_count: int = Field(default=5, ge=1, le=50)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def synchronize_title(self) -> QuestionSet:
+        label = (self.title or self.name).strip()
+        if not label:
+            raise ValueError("题集标题不能为空")
+        self.title = label
+        self.name = label
+        return self
+
+
+TimelineEventType = Literal[
+    "project_created",
+    "resume_version",
+    "optimization_run",
+    "practice_session",
+]
+
+
+class TimelineEvent(BaseModel):
+    """A deliberately small, privacy-safe projection of project activity."""
+
+    id: str
+    type: TimelineEventType
+    title: str
+    occurred_at: datetime
+    status: str = ""
+    resource_id: str = ""
+    summary: str = ""
+
+
+class ProjectTimeline(BaseModel):
+    project_id: str
+    events: list[TimelineEvent] = Field(default_factory=list)
 
 
 class ResumeVersion(BaseModel):

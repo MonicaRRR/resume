@@ -111,6 +111,8 @@ def update_provider_settings(
                 confirmed=body.codex_confirmed,
                 model=body.model,
             )
+        if body.kind == "rules":
+            return services.providers.configure_rules()
         raise ProviderConfigurationError("PROVIDER_KIND_INVALID", "不支持该模型类型")
     except ProviderConfigurationError as error:
         raise HTTPException(422, detail={"code": error.code, "message": str(error)}) from error

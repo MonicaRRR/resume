@@ -19,8 +19,8 @@ function currentYear(): number {
 
 
 function parseParts(value: string): Parts {
-  const match = value.trim().match(/^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/);
-  if (!match) return { year: "", month: "", day: "" };
+  const match = value.trim().match(/^(\d{0,4})(?:-(\d{0,2})(?:-(\d{0,2}))?)?$/);
+  if (!match) return { year: value.replace(/\D/g, "").slice(0, 4), month: "", day: "" };
   return {
     year: match[1] ?? "",
     month: match[2] ? String(Number(match[2])) : "",
@@ -42,45 +42,17 @@ function daysInMonth(yearText: string, monthText: string, minYear: number, maxYe
 }
 
 
-function pad2(value: string): string {
-  return String(Number(value)).padStart(2, "0");
-}
-
-
-function formatParts(parts: Parts, precision: DatePrecision, minYear: number, maxYear: number): string {
-  const yearNum = Number(parts.year);
-  if (parts.year.length !== 4 || !Number.isInteger(yearNum) || yearNum < minYear || yearNum > maxYear) {
-    return "";
-  }
-  const monthNum = Number(parts.month);
-  if (!parts.month || !Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) {
-    return String(yearNum);
-  }
-  if (precision === "month") {
-    return `${yearNum}-${pad2(parts.month)}`;
-  }
-  const maxDay = daysInMonth(parts.year, parts.month, minYear, maxYear);
-  const dayNum = Number(parts.day);
-  if (!parts.day || !Number.isInteger(dayNum) || dayNum < 1 || dayNum > maxDay) {
-    return `${yearNum}-${pad2(parts.month)}`;
-  }
-  return `${yearNum}-${pad2(parts.month)}-${pad2(parts.day)}`;
+function serializeParts(parts: Parts, precision: DatePrecision): string {
+  if (!parts.year && !parts.month && !parts.day) return "";
+  let value = parts.year;
+  if (parts.month || parts.day) value += `-${parts.month}`;
+  if (precision === "day" && parts.day) value += `-${parts.day}`;
+  return value;
 }
 
 
 function digitsOnly(raw: string): string {
   return raw.replace(/\D/g, "");
-}
-
-
-function clampDay(parts: Parts, minYear: number, maxYear: number): Parts {
-  if (!parts.day) return parts;
-  const maxDay = daysInMonth(parts.year, parts.month, minYear, maxYear);
-  const dayNum = Number(parts.day);
-  if (!Number.isInteger(dayNum)) return { ...parts, day: "" };
-  if (dayNum > maxDay) return { ...parts, day: String(maxDay) };
-  if (dayNum < 1) return { ...parts, day: "1" };
-  return parts;
 }
 
 
@@ -92,7 +64,43 @@ type Props = {
   maxYear?: number;
   "aria-label"?: string;
   disabled?: boolean;
+  invalid?: boolean;
+  errorMessage?: string;
 };
+
+export function dateRangeIsReversed(start: string, end: string): boolean {
+  const startMatch = start.trim().match(/^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/);
+  const endMatch = end.trim().match(/^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/);
+  if (!startMatch || !endMatch) return false;
+  const startKey = Number(startMatch[1]) * 10_000
+    + Number(startMatch[2] || 1) * 100
+    + Number(startMatch[3] || 1);
+  const endKey = Number(endMatch[1]) * 10_000
+    + Number(endMatch[2] || 12) * 100
+    + Number(endMatch[3] || 31);
+  return startKey > endKey;
+}
+
+export function dateValueIsInvalid(
+  value: string,
+  precision: DatePrecision,
+  minYear = DEFAULT_MIN_YEAR,
+  maxYear = currentYear(),
+): boolean {
+  if (!value.trim()) return false;
+  const parts = parseParts(value);
+  const year = Number(parts.year);
+  if (parts.year.length !== 4 || !Number.isInteger(year) || year < minYear || year > maxYear) return true;
+  if (parts.month) {
+    const month = Number(parts.month);
+    if (!Number.isInteger(month) || month < 1 || month > 12) return true;
+  }
+  if (precision === "day" && parts.day) {
+    const day = Number(parts.day);
+    if (!Number.isInteger(day) || day < 1 || day > daysInMonth(parts.year, parts.month, minYear, maxYear)) return true;
+  }
+  return false;
+}
 
 
 export function AppleDateParts({
@@ -103,13 +111,15 @@ export function AppleDateParts({
   maxYear = currentYear(),
   "aria-label": ariaLabel = "日期",
   disabled = false,
+  invalid = false,
+  errorMessage = "",
 }: Props) {
   const [draft, setDraft] = useState<Parts>(() => parseParts(value));
   const cappedMaxYear = Math.max(minYear, maxYear);
   const maxDay = daysInMonth(draft.year, draft.month, minYear, cappedMaxYear);
 
   useEffect(() => {
-    if (value !== formatParts(draft, precision, minYear, cappedMaxYear)) {
+    if (value !== serializeParts(draft, precision)) {
       setDraft(parseParts(value));
     }
     // Only re-sync when the external value changes.
@@ -117,11 +127,9 @@ export function AppleDateParts({
   }, [value, precision, minYear, cappedMaxYear]);
 
   function commit(next: Parts) {
-    const safe = precision === "month"
-      ? { ...next, day: "" }
-      : clampDay(next, minYear, cappedMaxYear);
+    const safe = precision === "month" ? { ...next, day: "" } : next;
     setDraft(safe);
-    onChange(formatParts(safe, precision, minYear, cappedMaxYear));
+    onChange(serializeParts(safe, precision));
   }
 
   function onYearChange(raw: string) {
@@ -129,71 +137,69 @@ export function AppleDateParts({
   }
 
   function onMonthChange(raw: string) {
-    let month = digitsOnly(raw).slice(0, 2);
-    if (month.length === 2) {
-      const monthNum = Number(month);
-      month = String(Math.min(12, Math.max(1, monthNum || 1)));
-    } else if (month === "0") {
-      // allow typing 01–09; keep single 0 until next digit or blur
-    }
-    commit(clampDay({ ...draft, month }, minYear, cappedMaxYear));
+    const month = digitsOnly(raw).slice(0, 2);
+    commit({ ...draft, month });
   }
 
   function onDayChange(raw: string) {
-    let day = digitsOnly(raw).slice(0, 2);
-    const limit = daysInMonth(draft.year, draft.month, minYear, cappedMaxYear);
-    if (day.length === 2 || Number(day) > limit) {
-      const dayNum = Number(day);
-      day = String(Math.min(limit, Math.max(1, dayNum || 1)));
-    }
+    const day = digitsOnly(raw).slice(0, 2);
     commit({ ...draft, day });
   }
 
   function onYearBlur() {
-    if (!draft.year) {
-      commit({ ...draft, year: "" });
-      return;
-    }
-    if (draft.year.length < 4) {
-      commit({ ...draft, year: "" });
-      return;
-    }
-    const yearNum = Number(draft.year);
-    commit({
-      ...draft,
-      year: String(Math.min(cappedMaxYear, Math.max(minYear, yearNum))),
-    });
+    commit(draft);
   }
 
   function onMonthBlur() {
-    if (!draft.month) {
-      commit({ ...draft, month: "" });
-      return;
-    }
-    const monthNum = Number(draft.month);
-    if (!Number.isInteger(monthNum) || monthNum < 1) {
-      commit({ ...draft, month: "" });
-      return;
-    }
-    commit(clampDay({ ...draft, month: String(Math.min(12, monthNum)) }, minYear, cappedMaxYear));
+    const month = Number(draft.month);
+    commit(
+      draft.month && Number.isInteger(month) && month >= 1 && month <= 12
+        ? { ...draft, month: String(month).padStart(2, "0") }
+        : draft,
+    );
   }
 
   function onDayBlur() {
-    if (!draft.day) {
-      commit({ ...draft, day: "" });
-      return;
-    }
-    const dayNum = Number(draft.day);
-    const limit = daysInMonth(draft.year, draft.month, minYear, cappedMaxYear);
-    if (!Number.isInteger(dayNum) || dayNum < 1) {
-      commit({ ...draft, day: "" });
-      return;
-    }
-    commit({ ...draft, day: String(Math.min(limit, dayNum)) });
+    const day = Number(draft.day);
+    commit(
+      draft.day && Number.isInteger(day) && day >= 1 && day <= maxDay
+        ? { ...draft, day: String(day).padStart(2, "0") }
+        : draft,
+    );
   }
 
+  const yearNumber = Number(draft.year);
+  const monthNumber = Number(draft.month);
+  const dayNumber = Number(draft.day);
+  const yearInvalid = Boolean(draft.year) && (
+    draft.year.length !== 4
+    || !Number.isInteger(yearNumber)
+    || yearNumber < minYear
+    || yearNumber > cappedMaxYear
+  );
+  const monthInvalid = Boolean(draft.month) && (
+    !Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12
+  );
+  const dayInvalid = precision === "day" && Boolean(draft.day) && (
+    !Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > maxDay
+  );
+  const hasInvalidPart = yearInvalid || monthInvalid || dayInvalid;
+  const showInvalid = invalid || hasInvalidPart;
+  const partMessage = yearInvalid
+    ? `年份需在 ${minYear}–${cappedMaxYear} 之间`
+    : monthInvalid
+      ? "月份需在 1–12 之间"
+      : dayInvalid
+        ? `日期需在 1–${maxDay} 之间`
+        : "";
+
   return (
-    <div className={`apple-date-parts precision-${precision}`} role="group" aria-label={ariaLabel}>
+    <div
+      className={`apple-date-parts precision-${precision}${showInvalid ? " is-invalid" : ""}`}
+      role="group"
+      aria-label={ariaLabel}
+      aria-invalid={showInvalid || undefined}
+    >
       <label className="apple-date-field">
         <span>年</span>
         <input
@@ -201,7 +207,8 @@ export function AppleDateParts({
           inputMode="numeric"
           autoComplete="off"
           aria-label={`${ariaLabel} 年`}
-          placeholder={`${minYear}-${cappedMaxYear}`}
+          placeholder="YYYY"
+          aria-invalid={(invalid || yearInvalid) || undefined}
           disabled={disabled}
           value={draft.year}
           onChange={(event) => onYearChange(event.target.value)}
@@ -215,7 +222,8 @@ export function AppleDateParts({
           inputMode="numeric"
           autoComplete="off"
           aria-label={`${ariaLabel} 月`}
-          placeholder="1-12"
+          placeholder="MM"
+          aria-invalid={(invalid || monthInvalid) || undefined}
           disabled={disabled}
           value={draft.month}
           onChange={(event) => onMonthChange(event.target.value)}
@@ -230,7 +238,8 @@ export function AppleDateParts({
             inputMode="numeric"
             autoComplete="off"
             aria-label={`${ariaLabel} 日`}
-            placeholder={`1-${maxDay}`}
+            placeholder="DD"
+            aria-invalid={(invalid || dayInvalid) || undefined}
             disabled={disabled}
             value={draft.day}
             onChange={(event) => onDayChange(event.target.value)}
@@ -238,6 +247,9 @@ export function AppleDateParts({
           />
         </label>
       ) : null}
+      {(errorMessage || partMessage) && (
+        <p className="apple-date-error" role="alert">{errorMessage || partMessage}</p>
+      )}
     </div>
   );
 }

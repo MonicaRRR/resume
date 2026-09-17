@@ -7,8 +7,8 @@ import type { CodexDetectResult, ProviderSettings } from "../types";
 
 
 const DEFAULTS: ProviderSettings = {
-  kind: "openai-compatible",
-  base_url: "https://api.openai.com/v1",
+  kind: "rules",
+  base_url: "",
   model: "",
   timeout: 90,
   temperature: 0.2,
@@ -33,6 +33,22 @@ export function SettingsPage() {
 
   function syncProviderCache(value: ProviderSettings) {
     queryClient.setQueryData(["provider-settings"], value);
+  }
+
+  async function useRules() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await api.saveProviderSettings({ ...settings, kind: "rules" });
+      setSettings(saved);
+      syncProviderCache(saved);
+      setMessage("已启用规则分析；所有分析都在本机完成，不需要 API。");
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : "无法启用规则分析");
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -207,12 +223,20 @@ export function SettingsPage() {
 
   return (
     <main className="settings-page">
-      <header className="settings-hero"><div><span className="eyebrow">LOCAL MODEL CONNECTIONS</span><h1>选择简历助手的推理入口</h1><p>当前 MVP 支持 OpenAI 兼容 API 与本机 Codex CLI。本地 Qwen 适配接口已预留，本期暂不启用。</p></div><a href="/">完成设置</a></header>
+      <header className="settings-hero"><div><span className="eyebrow">ANALYSIS MODE</span><h1>选择简历分析方式</h1><p>规则分析完全离线且结果可复现；也可选用 OpenAI 兼容 API 或本机 Codex CLI。</p></div><a href="/">完成设置</a></header>
       {message && <div className="settings-message success" role="status">{message}</div>}
       {error && <div className="settings-message error" role="alert">{error}</div>}
       <div className="provider-cards">
+        <section className={`provider-card ${settings.kind === "rules" && settings.configured ? "connected" : ""}`}>
+          <header><span>00 / OFFLINE</span><div className="provider-icon">✓</div><h2>规则分析（非生成式 AI）</h2><p>从 JD 与简历原文提取要求、匹配证据并重排已有内容；不联网、不生成新经历或数值。</p></header>
+          <p className="privacy-note">适合无 API 场景。结果由固定规则计算，可重复验证；自由文本润色能力有限。</p>
+          <button type="button" className="primary-button" disabled={busy || settings.kind === "rules"} onClick={useRules}>
+            {settings.kind === "rules" ? "当前正在使用" : "使用规则分析"}
+          </button>
+        </section>
+
         <form className={`provider-card ${settings.kind === "openai-compatible" && settings.configured ? "connected" : ""}`} onSubmit={saveApi}>
-          <header><span>01 / API</span><div className="provider-icon">↗</div><h2>OpenAI 兼容 API</h2><p>适用于 OpenAI、兼容网关与提供相同 Chat Completions 协议的服务。</p></header>
+          <header><span>01 / API</span><div className="provider-icon">↗</div><h2>OpenAI 兼容 API（生成式 AI）</h2><p>适用于 OpenAI、兼容网关与提供相同 Chat Completions 协议的服务。</p></header>
           <label>Base URL<input required type="url" value={settings.base_url} onChange={(event) => setSettings({ ...settings, base_url: event.target.value })} /></label>
           <label>模型名称<input required value={settings.model} placeholder="例如 gpt-5-mini" onChange={(event) => setSettings({ ...settings, model: event.target.value })} /></label>
           <label>API Key<input type="password" autoComplete="off" value={apiKey} placeholder="首次使用请填写；留空读取此地址的密钥" onChange={(event) => setApiKey(event.target.value)} /></label>
@@ -232,7 +256,7 @@ export function SettingsPage() {
         </form>
 
         <form className={`provider-card codex-card ${alreadyEnabled ? "connected" : ""}`} onSubmit={saveCodex}>
-          <header><span>02 / CODEX</span><div className="provider-icon">⌘</div><h2>Codex CLI</h2><p>首次启用需检测本机 Codex；之后配置会保存在本机，重启无需重测。</p></header>
+          <header><span>02 / CODEX</span><div className="provider-icon">⌘</div><h2>Codex CLI（生成式 AI）</h2><p>首次启用需检测本机 Codex；之后配置会保存在本机，重启无需重测。</p></header>
 
           <div className="codex-detect-row">
             <div>

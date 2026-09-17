@@ -4,7 +4,7 @@ import { encodeResumePhoto } from "../lib/encodeResumePhoto";
 import { tidyPasteArtifacts } from "../lib/tidyPasteArtifacts";
 import { sourcedText } from "../resume";
 import type { ResumeDocument, SourcedText } from "../types";
-import { AppleDateParts } from "./ui/AppleDateParts";
+import { AppleDateParts, dateRangeIsReversed, dateValueIsInvalid } from "./ui/AppleDateParts";
 import { AppleSelect } from "./ui/AppleSelect";
 
 
@@ -83,6 +83,29 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
   onDiscard: () => void;
   busy?: boolean;
 }) {
+  const currentYear = new Date().getFullYear();
+  const educationMaxYear = currentYear + 10;
+  const hasInvalidDates = (
+    dateValueIsInvalid(resume.basics.birthday, "day", 1960, currentYear)
+    || resume.education.some((item) => (
+      dateValueIsInvalid(item.start_date, "month", 1960, educationMaxYear)
+      || dateValueIsInvalid(item.end_date, "month", 1960, educationMaxYear)
+      || dateRangeIsReversed(item.start_date, item.end_date)
+    ))
+    || resume.work_experience.some((item) => (
+      dateValueIsInvalid(item.start_date, "day", 1960, currentYear)
+      || dateValueIsInvalid(item.end_date, "day", 1960, currentYear)
+      || dateRangeIsReversed(item.start_date, item.end_date)
+    ))
+    || resume.projects.some((item) => (
+      dateValueIsInvalid(item.start_date, "day", 1960, currentYear)
+      || dateValueIsInvalid(item.end_date, "day", 1960, currentYear)
+      || dateRangeIsReversed(item.start_date, item.end_date)
+    ))
+    || resume.certificates.some((item) => dateValueIsInvalid(item.date, "month", 1960, currentYear))
+    || resume.awards.some((item) => dateValueIsInvalid(item.date, "month", 1960, currentYear))
+  );
+
   const updateBasics = (key: BasicsTextKey, value: string) => {
     const next = structuredClone(resume);
     next.basics[key] = value;
@@ -217,15 +240,20 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                   aria-label={`入学时间 ${index + 1}`}
                   precision="month"
                   minYear={1960}
+                  maxYear={educationMaxYear}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                   value={item.start_date}
                   onChange={(start_date) => commit((draft) => { draft.education[index].start_date = start_date; })}
                 />
               </label>
-              <label>毕业时间
+              <label>毕业 / 预计毕业时间
                 <AppleDateParts
-                  aria-label={`毕业时间 ${index + 1}`}
+                  aria-label={`毕业或预计毕业时间 ${index + 1}`}
                   precision="month"
                   minYear={1960}
+                  maxYear={educationMaxYear}
+                  invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                  errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "毕业时间不能早于入学时间" : ""}
                   value={item.end_date}
                   onChange={(end_date) => commit((draft) => { draft.education[index].end_date = end_date; })}
                 />
@@ -238,43 +266,55 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
       <EditorSection
         title="专业技能"
         onAdd={() => commit((draft) => {
-          if (!draft.skills.length) {
-            draft.skills.push({ id: newId(), name: "专业技能", items: [] });
-          }
-          draft.skills[0].items.push(sourcedText(""));
+          draft.skills.push({ id: newId(), name: "专业技能", items: [sourcedText("")] });
         })}
+        addLabel="+ 添加分组"
       >
         <p className="panel-note">
           不要只写「Python / SQL」。按类别拆开，并补上场景或栈，例如「后端：Python、FastAPI；数据：SQL、Pandas；工具：Git、Linux」。
         </p>
-        {(resume.skills[0]?.items ?? []).map((item, index) => (
-          <div className="bullet-row" key={`skill-item-${index}`}>
-            <span>{index + 1}</span>
-            <input
-              aria-label={`技能 ${index + 1}`}
-              value={item.value}
-              onChange={(event) => commit((draft) => {
-                if (!draft.skills[0]) draft.skills.push({ id: newId(), name: "专业技能", items: [] });
-                const target = draft.skills[0].items[index] ?? sourcedText("");
-                target.value = event.target.value;
-                target.origin = "manual";
-                draft.skills[0].items[index] = target;
-              })}
-              placeholder="例：后端：Python、FastAPI、PostgreSQL"
-            />
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => commit((draft) => {
-                if (!draft.skills[0]) return;
-                draft.skills[0].items = draft.skills[0].items.filter((_, itemIndex) => itemIndex !== index);
-              })}
-            >
-              删
-            </button>
+        {resume.skills.map((group, groupIndex) => (
+          <div className="intake-card" key={group.id}>
+            <div className="intake-card-head">
+              <strong>技能分组 {groupIndex + 1}</strong>
+              <button type="button" className="text-button" onClick={() => commit((draft) => {
+                draft.skills = draft.skills.filter((entry) => entry.id !== group.id);
+              })}>删除分组</button>
+            </div>
+            <label className="intake-wide">
+              分组名称
+              <input
+                aria-label={`技能分组名称 ${groupIndex + 1}`}
+                value={group.name}
+                onChange={(event) => commit((draft) => { draft.skills[groupIndex].name = event.target.value; })}
+                placeholder="例：测试与质量"
+              />
+            </label>
+            {group.items.map((item, itemIndex) => (
+              <div className="bullet-row" key={`${group.id}-item-${itemIndex}`}>
+                <span>{itemIndex + 1}</span>
+                <input
+                  aria-label={`技能 ${groupIndex + 1}-${itemIndex + 1}`}
+                  value={item.value}
+                  onChange={(event) => commit((draft) => {
+                    const target = draft.skills[groupIndex].items[itemIndex] ?? sourcedText("");
+                    target.value = event.target.value;
+                    target.origin = "manual";
+                    draft.skills[groupIndex].items[itemIndex] = target;
+                  })}
+                  placeholder="例：Pytest、接口自动化、缺陷回归"
+                />
+                <button type="button" className="text-button" onClick={() => commit((draft) => {
+                  draft.skills[groupIndex].items = draft.skills[groupIndex].items.filter((_, index) => index !== itemIndex);
+                })}>删</button>
+              </div>
+            ))}
+            <button type="button" className="text-button" onClick={() => commit((draft) => {
+              draft.skills[groupIndex].items.push(sourcedText(""));
+            })}>+ 添加技能</button>
           </div>
         ))}
-        {!resume.skills[0]?.items.length && <p className="panel-note">还没有技能条目，点击「添加」开始填写。</p>}
+        {!resume.skills.length && <p className="panel-note">还没有技能分组，点击「添加分组」开始填写。</p>}
       </EditorSection>
 
       <EditorSection
@@ -297,6 +337,8 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                   <AppleDateParts
                     aria-label={`工作开始时间 ${entryIndex + 1}`}
                     precision="day"
+                    minYear={1960}
+                    invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                     value={item.start_date}
                     onChange={(start_date) => commit((draft) => { draft.work_experience[entryIndex].start_date = start_date; })}
                   />
@@ -305,6 +347,9 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                   <AppleDateParts
                     aria-label={`工作结束时间 ${entryIndex + 1}`}
                     precision="day"
+                    minYear={1960}
+                    invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                    errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "结束时间不能早于开始时间" : ""}
                     value={item.end_date}
                     onChange={(end_date) => commit((draft) => { draft.work_experience[entryIndex].end_date = end_date; })}
                   />
@@ -340,6 +385,8 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                   <AppleDateParts
                     aria-label={`项目开始时间 ${entryIndex + 1}`}
                     precision="day"
+                    minYear={1960}
+                    invalid={dateRangeIsReversed(item.start_date, item.end_date)}
                     value={item.start_date}
                     onChange={(start_date) => commit((draft) => { draft.projects[entryIndex].start_date = start_date; })}
                   />
@@ -348,6 +395,9 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
                   <AppleDateParts
                     aria-label={`项目结束时间 ${entryIndex + 1}`}
                     precision="day"
+                    minYear={1960}
+                    invalid={dateRangeIsReversed(item.start_date, item.end_date)}
+                    errorMessage={dateRangeIsReversed(item.start_date, item.end_date) ? "结束时间不能早于开始时间" : ""}
                     value={item.end_date}
                     onChange={(end_date) => commit((draft) => { draft.projects[entryIndex].end_date = end_date; })}
                   />
@@ -363,8 +413,126 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
         ))}
       </EditorSection>
 
+      <EditorSection
+        title="证书"
+        onAdd={() => commit((draft) => {
+          draft.certificates.push({ id: newId(), name: "", detail: sourcedText(""), date: "" });
+        })}
+      >
+        {resume.certificates.map((item, index) => (
+          <div className="intake-card" key={item.id}>
+            <div className="intake-card-head">
+              <strong>证书 {index + 1}</strong>
+              <button type="button" className="text-button" onClick={() => commit((draft) => {
+                draft.certificates = draft.certificates.filter((entry) => entry.id !== item.id);
+              })}>删除</button>
+            </div>
+            <div className="intake-grid">
+              <label>证书名称<input aria-label={`证书名称 ${index + 1}`} value={item.name} onChange={(event) => commit((draft) => {
+                draft.certificates[index].name = event.target.value;
+              })} /></label>
+              <label>取得时间
+                <AppleDateParts
+                  aria-label={`证书取得时间 ${index + 1}`}
+                  precision="month"
+                  minYear={1960}
+                  value={item.date}
+                  onChange={(date) => commit((draft) => { draft.certificates[index].date = date; })}
+                />
+              </label>
+              <label className="intake-wide">补充说明<textarea aria-label={`证书说明 ${index + 1}`} rows={2} value={item.detail.value} onChange={(event) => commit((draft) => {
+                draft.certificates[index].detail.value = event.target.value;
+                draft.certificates[index].detail.origin = "manual";
+              })} /></label>
+            </div>
+          </div>
+        ))}
+        {!resume.certificates.length && <p className="panel-note">暂无证书。</p>}
+      </EditorSection>
+
+      <EditorSection
+        title="奖项"
+        onAdd={() => commit((draft) => {
+          draft.awards.push({ id: newId(), name: "", detail: sourcedText(""), date: "" });
+        })}
+      >
+        {resume.awards.map((item, index) => (
+          <div className="intake-card" key={item.id}>
+            <div className="intake-card-head">
+              <strong>奖项 {index + 1}</strong>
+              <button type="button" className="text-button" onClick={() => commit((draft) => {
+                draft.awards = draft.awards.filter((entry) => entry.id !== item.id);
+              })}>删除</button>
+            </div>
+            <div className="intake-grid">
+              <label>奖项名称<input aria-label={`奖项名称 ${index + 1}`} value={item.name} onChange={(event) => commit((draft) => {
+                draft.awards[index].name = event.target.value;
+              })} /></label>
+              <label>获奖时间
+                <AppleDateParts
+                  aria-label={`获奖时间 ${index + 1}`}
+                  precision="month"
+                  minYear={1960}
+                  value={item.date}
+                  onChange={(date) => commit((draft) => { draft.awards[index].date = date; })}
+                />
+              </label>
+              <label className="intake-wide">补充说明<textarea aria-label={`奖项说明 ${index + 1}`} rows={2} value={item.detail.value} onChange={(event) => commit((draft) => {
+                draft.awards[index].detail.value = event.target.value;
+                draft.awards[index].detail.origin = "manual";
+              })} /></label>
+            </div>
+          </div>
+        ))}
+        {!resume.awards.length && <p className="panel-note">暂无奖项。</p>}
+      </EditorSection>
+
+      <EditorSection
+        title="自定义栏目"
+        onAdd={() => commit((draft) => {
+          draft.custom_sections.push({ id: newId(), title: "", items: [sourcedText("")] });
+        })}
+      >
+        {resume.custom_sections.map((section, sectionIndex) => (
+          <div className="intake-card" key={section.id}>
+            <div className="intake-card-head">
+              <strong>自定义栏目 {sectionIndex + 1}</strong>
+              <button type="button" className="text-button" onClick={() => commit((draft) => {
+                draft.custom_sections = draft.custom_sections.filter((entry) => entry.id !== section.id);
+              })}>删除栏目</button>
+            </div>
+            <label className="intake-wide">栏目名称<input aria-label={`自定义栏目名称 ${sectionIndex + 1}`} value={section.title} onChange={(event) => commit((draft) => {
+              draft.custom_sections[sectionIndex].title = event.target.value;
+            })} /></label>
+            {section.items.map((item, itemIndex) => (
+              <div className="bullet-row" key={`${section.id}-item-${itemIndex}`}>
+                <span>{itemIndex + 1}</span>
+                <input
+                  aria-label={`自定义栏目 ${sectionIndex + 1} 内容 ${itemIndex + 1}`}
+                  value={item.value}
+                  onChange={(event) => commit((draft) => {
+                    draft.custom_sections[sectionIndex].items[itemIndex].value = event.target.value;
+                    draft.custom_sections[sectionIndex].items[itemIndex].origin = "manual";
+                  })}
+                />
+                <button type="button" className="text-button" onClick={() => commit((draft) => {
+                  draft.custom_sections[sectionIndex].items = draft.custom_sections[sectionIndex].items.filter((_, index) => index !== itemIndex);
+                })}>删</button>
+              </div>
+            ))}
+            <button type="button" className="text-button" onClick={() => commit((draft) => {
+              draft.custom_sections[sectionIndex].items.push(sourcedText(""));
+            })}>+ 添加内容</button>
+          </div>
+        ))}
+        {!resume.custom_sections.length && <p className="panel-note">暂无自定义栏目。</p>}
+      </EditorSection>
+
+      {hasInvalidDates && (
+        <p className="editor-validation-error" role="alert">请先修改标红的日期或时间顺序，再保存。</p>
+      )}
       <div className="button-row">
-        <button type="button" className="primary-button" disabled={busy} onClick={onSave}>保存素材库为新版本</button>
+        <button type="button" className="primary-button" disabled={busy || hasInvalidDates} onClick={onSave}>保存素材库为新版本</button>
         <button type="button" className="secondary-button" onClick={onDiscard}>放弃未保存改动</button>
       </div>
     </section>
@@ -372,12 +540,17 @@ export function ResumeEditor({ resume, onChange, onSave, onDiscard, busy = false
 }
 
 
-function EditorSection({ title, onAdd, children }: { title: string; onAdd: () => void; children: ReactNode }) {
+function EditorSection({ title, onAdd, children, addLabel = "+ 添加" }: {
+  title: string;
+  onAdd: () => void;
+  children: ReactNode;
+  addLabel?: string;
+}) {
   return (
     <div className="editor-section">
       <div className="intake-section-head">
         <h3>{title}</h3>
-        <button type="button" className="text-button" onClick={onAdd}>+ 添加</button>
+        <button type="button" className="text-button" onClick={onAdd}>{addLabel}</button>
       </div>
       {children}
     </div>

@@ -9,7 +9,7 @@ from resume_mvp.ai_workflows import (
     _safe_resume,
 )
 from resume_mvp.domain import Fact, JobAnalysis, JobRequirement, MatchItem, MatchReport, ResumeDocument
-from resume_mvp.matching import calculate_match
+from resume_mvp.matching import _collect_evidence, _normalize, calculate_match
 from resume_mvp.providers.base import AIProvider
 
 
@@ -41,6 +41,8 @@ async def analyze_evidence_match(
             "已有证据：简历或事实中能直接或较强对应；excerpts 摘录原文，fact_ids 只能来自 allowed_fact_ids；reason 可简述为何匹配",
             "证据较弱：有间接相关经历但表述不完全对齐；必须写 reason，说明「已有什么相关内容」以及「还缺什么才够硬」",
             "没有证据：确实找不到可核对内容；reason 说明缺哪类经历/技能",
+            "专业技能栏只能视为自报能力，不能单独支撑「已有证据」；若只在技能栏命中，最多标为「证据较弱」，并说明还缺工作/项目中的使用场景、行动和结果",
+            "判断实践能力时优先引用工作/实习/项目要点；只有这些经历能直接对应要求时，才可标为「已有证据」",
             "软性要求：业务抽象/建模/沟通/学习能力/方案设计等素质项，简历很少逐字出现——不要轻易标没有证据；标软性要求，reason 说明为何属软性、可如何在项目要点中间接体现",
             "禁止编造公司、项目、数字或技能；excerpts 必须能在 resume 或 facts 中找到依据（允许轻微截断）",
             "weight 使用对应要求的 weight",
@@ -81,7 +83,8 @@ def merge_ai_and_rule_match(
             status="没有证据",
             weight=requirement.weight,
         )
-        item = _normalize_ai_item(base, requirement, allowed_facts)
+        item = _normalize_ai_item(base, requirement, allowed_facts, resume, facts)
+        item = _downgrade_skill_only_item(item, resume, facts)
         if rule_item is not None:
             item = _merge_with_rule(item, rule_item, requirement)
         merged_items.append(item)
@@ -93,11 +96,32 @@ def _normalize_ai_item(
     item: MatchItem,
     requirement: JobRequirement,
     allowed_facts: set[str],
+    resume: ResumeDocument,
+    facts: list[Fact],
 ) -> MatchItem:
     status = item.status if item.status in _STATUS_RANK else "没有证据"
     fact_ids = [fact_id for fact_id in item.fact_ids if fact_id in allowed_facts]
-    excerpts = [text.strip() for text in item.excerpts if text.strip()][:4]
+    source_snippets = _collect_evidence(resume, facts)
+    normalized_sources = [_normalize(snippet.text) for snippet in source_snippets]
+    excerpts = []
+    for text in item.excerpts:
+        cleaned = text.strip()
+        normalized = _normalize(cleaned)
+        if not normalized:
+            continue
+        # The model may trim punctuation/whitespace, but may not embellish the
+        # source.  Keep only spans that can be found in a real resume/fact item.
+        if any(normalized in source for source in normalized_sources):
+            excerpts.append(cleaned)
+        if len(excerpts) == 4:
+            break
+
+    grounded = bool(excerpts or fact_ids)
+    if status in {"已有证据", "证据较弱"} and not grounded:
+        status = "没有证据"
     reason = (item.reason or "").strip()
+    if item.status in {"已有证据", "证据较弱"} and not grounded:
+        reason = "模型返回的证据摘录无法在当前简历或事实库中定位，已按无可核验证据处理。"
     if status == "证据较弱" and not reason:
         if excerpts:
             reason = f"仅有间接相关表述（如「{excerpts[0][:40]}」），尚未写清与该要求的直接对应关系或可验证结果。"
@@ -116,6 +140,72 @@ def _normalize_ai_item(
         reason=reason,
         weight=requirement.weight,
     )
+
+
+def _downgrade_skill_only_item(
+    item: MatchItem,
+    resume: ResumeDocument,
+    facts: list[Fact],
+) -> MatchItem:
+    """A skills-list claim alone is self-report, not demonstrated practice."""
+    if item.status != "已有证据":
+        return item
+    experience_fact_ids = {
+        fact.id
+        for fact in facts
+        if any(marker in fact.category for marker in ("工作", "实习", "项目"))
+    }
+    if any(fact_id in experience_fact_ids for fact_id in item.fact_ids):
+        return item
+
+    experience_texts = [
+        text.strip()
+        for text in [
+            *(
+                f"{entry.company} {entry.title}"
+                for entry in resume.work_experience
+            ),
+            *(
+                bullet.value
+                for entry in resume.work_experience
+                for bullet in entry.bullets
+            ),
+            *(
+                f"{entry.name} {entry.role}"
+                for entry in resume.projects
+            ),
+            *(
+                bullet.value
+                for entry in resume.projects
+                for bullet in entry.bullets
+            ),
+        ]
+        if text.strip()
+    ]
+    for excerpt in item.excerpts:
+        if any(excerpt in text or text in excerpt for text in experience_texts):
+            return item
+
+    skill_fact_ids = {fact.id for fact in facts if "技能" in fact.category}
+    skill_texts = [
+        skill.value.strip()
+        for group in resume.skills
+        for skill in group.items
+        if skill.value.strip()
+    ]
+    fact_evidence_is_skill_only = bool(item.fact_ids) and all(
+        fact_id in skill_fact_ids for fact_id in item.fact_ids
+    )
+    excerpt_evidence_is_skill_only = bool(item.excerpts) and all(
+        any(excerpt in text or text in excerpt for text in skill_texts)
+        for excerpt in item.excerpts
+    )
+    if not fact_evidence_is_skill_only and not excerpt_evidence_is_skill_only:
+        return item
+    return item.model_copy(update={
+        "status": "证据较弱",
+        "reason": "目前只在专业技能栏发现自报能力，尚缺工作/项目中的使用场景、行动和结果证据。",
+    })
 
 
 def _merge_with_rule(
@@ -139,6 +229,19 @@ def _merge_with_rule(
                 }
             )
         return ai_item
+
+    is_education_gate = any(
+        marker in req_text
+        for marker in ("学历", "应届", "届", "毕业", "本科", "硕士", "博士", "专业")
+    )
+    if is_education_gate and _STATUS_RANK[rule_item.status] < _STATUS_RANK[ai_item.status]:
+        # Eligibility rules are authoritative and conjunctive.  An AI semantic
+        # hit cannot compensate for a failed graduation, degree, or major atom.
+        return rule_item.model_copy(update={
+            "requirement_id": requirement.id,
+            "requirement": requirement.text,
+            "weight": requirement.weight,
+        })
 
     if _STATUS_RANK[rule_item.status] <= _STATUS_RANK[ai_item.status]:
         # Rules weaker or equal — keep AI, maybe fill empty excerpts.

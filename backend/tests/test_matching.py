@@ -63,8 +63,8 @@ def test_match_report_links_requirements_to_facts() -> None:
     assert report.coverage == 0.67
 
 
-def test_match_uses_resume_skills_even_without_facts() -> None:
-    """Catches false '没有证据' when skills exist only on the resume body."""
+def test_skill_list_alone_is_only_weak_evidence() -> None:
+    """Self-reported skills need work/project usage before becoming strong evidence."""
     resume = ResumeDocument.blank()
     resume.skills = [
         SkillGroup(
@@ -82,10 +82,12 @@ def test_match_uses_resume_skills_even_without_facts() -> None:
 
     report = calculate_match(analysis, resume, facts=[])
 
-    assert report.items[0].status == "已有证据"
-    assert report.items[1].status == "已有证据"
+    assert report.items[0].status == "证据较弱"
+    assert report.items[1].status == "证据较弱"
     assert report.items[2].status == "没有证据"
+    assert "工作/项目" in report.items[0].reason
     assert "Python" in report.items[0].excerpts[0] or "后端" in report.items[0].excerpts[0]
+    assert report.coverage == 0.33
 
 
 def test_match_aliases_k8s_to_kubernetes_in_project_bullets() -> None:
@@ -155,6 +157,61 @@ def test_education_window_requirement_matches_exact_27th_cohort() -> None:
     assert item.status == "已有证据"
     assert "2027-08" in item.excerpts[0]
     assert "人工智能" in item.excerpts[0]
+
+
+def test_default_2027_cohort_accepts_graduation_from_previous_september() -> None:
+    resume = ResumeDocument.blank()
+    resume.education = [EducationEntry(
+        institution="示例大学", degree="硕士", field="人工智能",
+        start_date="2024-09", end_date="2026-10",
+    )]
+    analysis = JobAnalysis(requirements=[JobRequirement(
+        id="edu-cohort",
+        text="2027届本科及以上学历，计算机等相关专业",
+        evidence_quote="2027届本科及以上学历",
+    )])
+
+    item = calculate_match(analysis, resume, []).items[0]
+
+    assert item.status == "已有证据"
+    assert "27届" in item.excerpts[0]
+
+
+def test_default_2027_cohort_rejects_graduation_before_previous_september() -> None:
+    resume = ResumeDocument.blank()
+    resume.education = [EducationEntry(
+        institution="示例大学", degree="硕士", field="人工智能",
+        start_date="2024-09", end_date="2026-08",
+    )]
+    analysis = JobAnalysis(requirements=[JobRequirement(
+        id="edu-cohort",
+        text="2027届本科及以上学历，计算机等相关专业",
+        evidence_quote="2027届本科及以上学历",
+    )])
+
+    item = calculate_match(analysis, resume, []).items[0]
+
+    assert item.status != "已有证据"
+
+
+def test_education_hard_atoms_use_and_semantics() -> None:
+    resume = ResumeDocument.blank()
+    resume.education = [EducationEntry(
+        institution="示例大学",
+        degree="硕士",
+        field="金融学",
+        end_date="2027-06",
+    )]
+    analysis = JobAnalysis(requirements=[JobRequirement(
+        id="edu-and",
+        text="2027届本科及以上学历，计算机相关专业",
+        evidence_quote="2027届本科及以上学历，计算机相关专业",
+    )])
+
+    item = calculate_match(analysis, resume, []).items[0]
+
+    assert item.status == "证据较弱"
+    assert "部分条件" in item.reason
 
 
 def test_soft_business_design_requirement_is_not_hard_miss() -> None:

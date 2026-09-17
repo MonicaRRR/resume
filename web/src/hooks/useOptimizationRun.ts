@@ -34,8 +34,9 @@ export function useOptimizationRun(projectId: string) {
     const cached = sessionStorage.getItem(storageKey(projectId));
     if (cached) {
       setRunId(cached);
-      return;
     }
+    // Always reconcile with the backend. A manual/offline analysis may have
+    // created a newer run while this browser still remembers an older one.
     void api.getLatestOptimizationRun(projectId).then((latest) => {
       if (cancelled || !latest) return;
       setRunId(latest.id);

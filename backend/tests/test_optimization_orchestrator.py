@@ -41,6 +41,10 @@ def passing_layout() -> LayoutReport:
     return LayoutReport(page_count=1, density_by_page=[0.8], issues=[])
 
 
+def overflowing_layout() -> LayoutReport:
+    return LayoutReport(page_count=2, density_by_page=[0.9, 0.1], issues=[])
+
+
 def strong_match() -> MatchReport:
     return MatchReport(
         coverage=0.9,
@@ -224,6 +228,42 @@ async def test_quick_run_skips_reviewer(harness: OrchestratorHarness) -> None:
     result = await harness.orchestrator.execute(run.id)
     assert result.status == "ready_for_user"
     assert harness.reviewer_calls == 0
+
+
+@pytest.mark.anyio
+async def test_quick_campus_run_cannot_finish_when_result_exceeds_one_page(
+    harness: OrchestratorHarness,
+) -> None:
+    async def render(context, resume):
+        if resume.basics.summary.value == "熟悉后端开发":
+            return passing_layout()
+        return overflowing_layout()
+
+    harness.orchestrator._render_fn = render
+    run = await harness.orchestrator.create_run(harness.project_id, "quick", "test")
+    result = await harness.orchestrator.execute(run.id)
+
+    assert result.status == "waiting_for_user"
+    assert result.layout_report.page_count == 2
+    assert "必须压到一页" in result.message
+
+
+@pytest.mark.anyio
+async def test_deep_campus_run_stays_waiting_after_refinement_limit_if_overflowing(
+    harness: OrchestratorHarness,
+) -> None:
+    async def render(context, resume):
+        if resume.basics.summary.value == "熟悉后端开发":
+            return passing_layout()
+        return overflowing_layout()
+
+    harness.orchestrator._render_fn = render
+    run = await harness.orchestrator.create_run(harness.project_id, "deep", "test")
+    result = await harness.orchestrator.execute(run.id)
+
+    assert result.status == "waiting_for_user"
+    assert result.quality.page_policy_passed is False
+    assert "一页硬约束" in result.message
 
 
 @pytest.mark.anyio

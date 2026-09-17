@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from fastapi.testclient import TestClient
 
@@ -60,3 +61,45 @@ def test_profile_import_rejects_unsupported_type(tmp_path: Path) -> None:
     )
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "IMPORT_FAILED"
+
+
+def test_profile_json_backup_can_be_exported_and_imported_as_draft(tmp_path: Path) -> None:
+    client = TestClient(create_app(data_dir=tmp_path))
+    resume = client.get("/api/profile").json()["resume"]
+    resume["basics"]["name"] = "备份用户"
+    resume["skills"] = [{
+        "id": "skill-json",
+        "name": "测试技能",
+        "items": [{
+            "value": "Python",
+            "source_fact_ids": [],
+            "origin": "manual",
+            "confidence": 1,
+        }],
+    }]
+    saved = client.put("/api/profile", json={"resume": resume})
+    assert saved.status_code == 200
+
+    exported = client.get("/api/profile/export/json")
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("application/json")
+    assert "attachment" in exported.headers["content-disposition"]
+    backup = exported.json()
+    assert backup["schema_version"] == 1
+    assert backup["resume"]["basics"]["name"] == "备份用户"
+
+    # Import remains draft-only and accepts the complete exported envelope.
+    client.put("/api/profile", json={"resume": client.get("/api/profile").json()["resume"]})
+    imported = client.post(
+        "/api/profile/import",
+        files={
+            "file": (
+                "profile.json",
+                json.dumps(backup, ensure_ascii=False).encode("utf-8"),
+                "application/json",
+            )
+        },
+    )
+    assert imported.status_code == 200, imported.text
+    assert imported.json()["resume"]["basics"]["name"] == "备份用户"
+    assert imported.json()["quality_score"] == 1

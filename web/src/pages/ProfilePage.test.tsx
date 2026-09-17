@@ -43,6 +43,11 @@ test("导入后草稿含姓名", async () => {
   wrap(<ProfilePage />);
   const nameInput = await screen.findByLabelText("姓名");
   expect(nameInput).toHaveValue("");
+  expect(screen.getByRole("button", { name: "导出经历库 JSON" })).toBeInTheDocument();
+  expect(screen.getByLabelText("上传已有简历")).toHaveAttribute(
+    "accept",
+    expect.stringContaining(".json"),
+  );
 
   const file = new File(["张宁\n教育背景\n示例大学"], "resume.txt", { type: "text/plain" });
   await user.upload(screen.getByLabelText("上传已有简历"), file);

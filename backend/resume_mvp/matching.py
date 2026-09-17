@@ -111,6 +111,16 @@ _SOFT_PATTERNS = [
 class EvidenceSnippet:
     text: str
     fact_ids: list[str] = field(default_factory=list)
+    source: str = "other"
+
+
+@dataclass
+class EvidenceDecision:
+    """A business decision; retrieval scores are deliberately kept out of it."""
+
+    status: str
+    snippets: list[EvidenceSnippet] = field(default_factory=list)
+    reason: str = ""
 
 
 def calculate_match(
@@ -131,33 +141,37 @@ def calculate_match(
             weighted_score += contribution
             continue
 
+        has_education_gate = _has_education_requirement(req_text)
+        has_capability_gate = any(
+            marker in req_text.lower()
+            for marker in ("全栈", "跨语言", "多语言", "fullstack", "full-stack", "polyglot", "前后端")
+        )
+        has_tech_gate = bool(_tech_concepts(requirement.text))
         edu_score, edu_snippets = _education_requirement_match(req_text, resume)
         cap_score, cap_snippets = _capability_requirement_match(req_text, resume, evidence)
         scored = [
             (_best_similarity(requirement.text, requirement.evidence_quote, snippet.text), snippet)
             for snippet in evidence
         ]
-        text_best = max((score for score, _ in scored), default=0.0)
-        strongest = max(text_best, edu_score, cap_score)
+        # evidence_quote broadens retrieval, while the normalized requirement
+        # remains the authoritative set of atoms to prove.
+        text_decision = _decide_text_evidence(requirement.text, scored)
+        capability_decision = _capability_decision(cap_score, cap_snippets)
+        education_decision = _education_decision(edu_score, edu_snippets)
+        decision = _combine_decisions(
+            text_decision,
+            capability_decision,
+            education_decision if has_education_gate else None,
+            has_non_education_gate=has_capability_gate or has_tech_gate,
+        )
+        status = decision.status
+        contribution = requirement.weight * {
+            "已有证据": 1.0,
+            "证据较弱": 0.5,
+            "没有证据": 0.0,
+        }[status]
 
-        if strongest >= 0.45:
-            status = "已有证据"
-            contribution = requirement.weight
-            threshold = 0.45
-        elif strongest >= 0.22:
-            status = "证据较弱"
-            contribution = requirement.weight * 0.5
-            threshold = 0.22
-        else:
-            status = "没有证据"
-            contribution = 0.0
-            threshold = 1.1
-
-        supporting = [snippet for score, snippet in scored if score >= threshold]
-        if edu_score >= threshold:
-            supporting = edu_snippets + supporting
-        if cap_score >= threshold:
-            supporting = cap_snippets + supporting
+        supporting = list(decision.snippets)
         supporting.sort(
             key=lambda snippet: max(
                 _best_similarity(requirement.text, requirement.evidence_quote, snippet.text),
@@ -188,7 +202,7 @@ def calculate_match(
                 status=status,
                 fact_ids=list(dict.fromkeys(fact_ids)),
                 excerpts=excerpts,
-                reason=_rule_match_reason(status, excerpts, requirement.text),
+                reason=decision.reason or _rule_match_reason(status, excerpts, requirement.text),
                 weight=requirement.weight,
             )
         )
@@ -196,6 +210,111 @@ def calculate_match(
 
     coverage = weighted_score / total_weight if total_weight else 0.0
     return MatchReport(coverage=round(coverage, 2), items=items)
+
+
+def _has_education_requirement(text: str) -> bool:
+    return any(
+        marker in text
+        for marker in ("学历", "应届", "届", "毕业", "本科", "硕士", "博士", "专业", "大专")
+    )
+
+
+def _tech_concepts(text: str) -> set[str]:
+    """Return canonical concrete-tech concepts mentioned by the text."""
+    tokens = _content_tokens(text)
+    concepts: set[str] = set()
+    for name, aliases in _TECH_ALIASES.items():
+        if name in tokens or aliases & tokens:
+            concepts.add(name)
+    return concepts
+
+
+def _decide_text_evidence(
+    requirement_text: str,
+    ranked: list[tuple[float, EvidenceSnippet]],
+) -> EvidenceDecision:
+    """Use semantic rule outcomes for status; similarity only orders candidates."""
+    required_tech = _tech_concepts(requirement_text)
+    normalized_requirement = _normalize(requirement_text)
+    strong: list[EvidenceSnippet] = []
+    weak: list[EvidenceSnippet] = []
+
+    for score, snippet in sorted(ranked, key=lambda item: item[0], reverse=True):
+        normalized_evidence = _normalize(snippet.text)
+        exact = bool(
+            normalized_requirement
+            and normalized_evidence
+            and (
+                normalized_requirement in normalized_evidence
+                or normalized_evidence in normalized_requirement
+            )
+        )
+        evidence_tech = _tech_concepts(snippet.text)
+        covers_tech = bool(required_tech) and required_tech <= evidence_tech
+        related = exact or covers_tech or score > 0
+        if not related:
+            continue
+        if snippet.source == "experience" and (exact or covers_tech):
+            strong.append(snippet)
+        else:
+            weak.append(snippet)
+
+    if strong:
+        return EvidenceDecision("已有证据", strong[:3])
+    if weak:
+        skill_only = all(snippet.source == "skill" for snippet in weak)
+        reason = (
+            "仅在专业技能栏发现自报能力，尚缺工作/项目中的使用场景、行动和结果证据。"
+            if skill_only
+            else "有相关线索，但尚缺能完整对应要求的工作/项目行动与结果证据。"
+        )
+        return EvidenceDecision("证据较弱", weak[:3], reason)
+    return EvidenceDecision("没有证据")
+
+
+def _education_decision(score: float, snippets: list[EvidenceSnippet]) -> EvidenceDecision:
+    if score == 1.0:
+        return EvidenceDecision("已有证据", snippets)
+    if score > 0:
+        return EvidenceDecision(
+            "证据较弱",
+            snippets,
+            "教育背景仅满足部分条件，硬性学历、专业或毕业时间要求不能互相抵消。",
+        )
+    return EvidenceDecision("没有证据", snippets, "教育背景不满足或缺少该硬性条件所需的信息。")
+
+
+def _capability_decision(score: float, snippets: list[EvidenceSnippet]) -> EvidenceDecision:
+    if score == 1.0:
+        return EvidenceDecision("已有证据", snippets)
+    if score > 0:
+        return EvidenceDecision("证据较弱", snippets, "能力信号只覆盖了该要求的一部分。")
+    return EvidenceDecision("没有证据")
+
+
+def _combine_decisions(
+    text: EvidenceDecision,
+    capability: EvidenceDecision,
+    education: EvidenceDecision | None,
+    *,
+    has_non_education_gate: bool,
+) -> EvidenceDecision:
+    rank = {"没有证据": 0, "证据较弱": 1, "已有证据": 2}
+    optional = [item for item in (text, capability) if item.status != "没有证据"]
+    evidence = max(optional, key=lambda item: rank[item.status]) if optional else text
+
+    # Education/eligibility clauses are mandatory. A lexical or technology hit
+    # must never compensate for a failed degree, major, or graduation window.
+    if education is not None and education.status != "已有证据":
+        snippets = [*education.snippets, *evidence.snippets]
+        return EvidenceDecision(education.status, snippets, education.reason)
+    if education is not None:
+        # A pure education requirement is complete once all education atoms pass.
+        if not has_non_education_gate:
+            return EvidenceDecision("已有证据", education.snippets)
+        snippets = [*education.snippets, *evidence.snippets]
+        return EvidenceDecision(evidence.status, snippets, evidence.reason)
+    return evidence
 
 
 def _is_soft_requirement(text: str) -> bool:
@@ -322,8 +441,18 @@ def _capability_requirement_match(
     summary = EvidenceSnippet(
         text="能力匹配：" + "；".join(notes) if notes else "能力匹配：简历技术栈可覆盖该要求",
         fact_ids=[],
+        source="experience" if role_fullstack or any(item.source == "experience" for item in retrieved) else "skill",
     )
-    return score, [summary, *retrieved]
+    requested_checks: list[bool] = []
+    if wants_fullstack:
+        requested_checks.append(role_fullstack or (has_frontend and has_backend))
+    if wants_polyglot:
+        requested_checks.append(len(languages) >= 2)
+    has_practical_evidence = role_fullstack or any(
+        item.source == "experience" for item in retrieved
+    )
+    decision_signal = 1.0 if all(requested_checks) and has_practical_evidence else 0.5
+    return decision_signal, [summary, *retrieved]
 
 
 def _detected_language_groups(corpus: str) -> set[str]:
@@ -368,13 +497,16 @@ def _education_requirement_match(req_text: str, resume: ResumeDocument) -> tuple
         return 0.0, []
 
     wanted_years = _wanted_grad_years(req_text)
+    wanted_window = _wanted_grad_window(req_text)
     wanted_degree = _wanted_min_degree(req_text)
     wants_major = any(alias in req_text.lower() for alias in _MAJOR_ALIASES) or "相关专业" in req_text
 
     best_score = 0.0
     best_snippets: list[EvidenceSnippet] = []
     for item in resume.education:
-        score, snippet = _score_education_entry(item, req_text, wanted_years, wanted_degree, wants_major)
+        score, snippet = _score_education_entry(
+            item, req_text, wanted_years, wanted_window, wanted_degree, wants_major
+        )
         if score > best_score:
             best_score = score
             best_snippets = [snippet] if snippet else []
@@ -385,6 +517,7 @@ def _score_education_entry(
     item: EducationEntry,
     req_text: str,
     wanted_years: set[int],
+    wanted_window: tuple[tuple[int, int], tuple[int, int]] | None,
     wanted_degree: int,
     wants_major: bool,
 ) -> tuple[float, EvidenceSnippet | None]:
@@ -392,11 +525,19 @@ def _score_education_entry(
     notes: list[str] = []
 
     grad_year = _parse_year(item.end_date)
-    if wanted_years:
-        year_ok = grad_year in wanted_years if grad_year else False
+    grad_period = _parse_year_month(item.end_date)
+    if wanted_window or wanted_years:
+        if wanted_window and grad_period:
+            (start_year, start_month), (end_year, end_month) = wanted_window
+            start_key = start_year * 100 + start_month
+            end_key = end_year * 100 + end_month
+            grad_key = grad_period[0] * 100 + grad_period[1]
+            year_ok = start_key <= grad_key <= end_key
+        else:
+            year_ok = grad_year in wanted_years if grad_year else False
         checks.append(year_ok)
         if grad_year:
-            cohort = _cohort_label(grad_year)
+            cohort = _cohort_label_for_date(item.end_date)
             notes.append(f"{item.end_date or grad_year}毕业" + (f"（{cohort}）" if cohort else ""))
         elif year_ok is False:
             notes.append("毕业时间未填或不匹配")
@@ -417,20 +558,15 @@ def _score_education_entry(
     if not checks:
         # Generic education mention — weak credit if any education exists.
         header = _education_header(item)
-        return (0.35, EvidenceSnippet(header)) if header else (0.0, None)
+        return (0.35, EvidenceSnippet(header, source="education")) if header else (0.0, None)
 
-    passed = sum(1 for check in checks if check)
-    ratio = passed / len(checks)
     header = _education_header(item)
     detail = "；".join(notes) if notes else header
-    snippet = EvidenceSnippet(f"教育背景：{detail}" if detail else header)
-    if ratio >= 1.0:
-        return 0.95, snippet
-    if ratio >= 0.67:
-        return 0.7, snippet
-    if ratio >= 0.34:
-        return 0.4, snippet
-    return 0.15, snippet
+    snippet = EvidenceSnippet(f"教育背景：{detail}" if detail else header, source="education")
+    # Education clauses are conjunctive hard gates: a degree hit cannot hide a
+    # graduation-window or major mismatch.  The numeric value here is only an
+    # internal enum bridge (complete / partial), not a similarity confidence.
+    return (1.0 if all(checks) else 0.5), snippet
 
 
 def _education_header(item: EducationEntry) -> str:
@@ -454,8 +590,37 @@ def _wanted_grad_years(text: str) -> set[int]:
     return years
 
 
+def _wanted_grad_window(text: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """Return an explicit window, or the conventional Sep–Aug cohort window."""
+    explicit = re.search(
+        r"(20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*"
+        r"(?:[-—–~～至到]|(?:\s+))+\s*"
+        r"(20\d{2})\s*年?\s*(\d{1,2})\s*月?",
+        text,
+    )
+    if explicit:
+        return (
+            (int(explicit.group(1)), int(explicit.group(2))),
+            (int(explicit.group(3)), int(explicit.group(4))),
+        )
+    cohort = re.search(r"(?<!\d)(?:20)?(\d{2})\s*届", text)
+    if cohort:
+        year = 2000 + int(cohort.group(1))
+        return ((year - 1, 9), (year, 8))
+    return None
+
+
 def _cohort_label(grad_year: int) -> str:
     return f"{grad_year % 100:02d}届"
+
+
+def _cohort_label_for_date(value: str) -> str:
+    parsed = _parse_year_month(value)
+    if not parsed:
+        year = _parse_year(value)
+        return _cohort_label(year) if year else ""
+    year, month = parsed
+    return _cohort_label(year + 1 if month >= 9 else year)
 
 
 def _wanted_min_degree(text: str) -> int:
@@ -499,19 +664,40 @@ def _parse_year(value: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _parse_year_month(value: str) -> tuple[int, int] | None:
+    match = re.search(r"(20\d{2})(?:[./-](\d{1,2}))?", value or "")
+    if not match:
+        return None
+    year = int(match.group(1))
+    month = int(match.group(2) or 6)
+    if month < 1 or month > 12:
+        return None
+    return year, month
+
+
 def _collect_evidence(resume: ResumeDocument, facts: list[Fact]) -> list[EvidenceSnippet]:
     snippets: list[EvidenceSnippet] = []
     seen: set[str] = set()
 
-    def add(text: str, fact_ids: list[str] | None = None) -> None:
+    def add(text: str, fact_ids: list[str] | None = None, source: str = "other") -> None:
         cleaned = text.strip()
         if not cleaned or cleaned in seen:
             return
         seen.add(cleaned)
-        snippets.append(EvidenceSnippet(text=cleaned, fact_ids=list(fact_ids or [])))
+        snippets.append(EvidenceSnippet(text=cleaned, fact_ids=list(fact_ids or []), source=source))
 
     for fact in facts:
-        add(fact.statement, [fact.id])
+        category = fact.category
+        source = (
+            "experience"
+            if "工作" in category or "实习" in category or "项目" in category
+            else "skill"
+            if "技能" in category
+            else "education"
+            if "教育" in category
+            else "other"
+        )
+        add(fact.statement, [fact.id], source)
 
     if resume.basics.summary.value.strip():
         add(resume.basics.summary.value, list(resume.basics.summary.source_fact_ids))
@@ -521,32 +707,33 @@ def _collect_evidence(resume: ResumeDocument, facts: list[Fact]) -> list[Evidenc
     for item in resume.work_experience:
         header = " ".join(part for part in [item.company, item.title] if part.strip())
         if header:
-            add(header)
+            add(header, source="experience")
         for bullet in item.bullets:
-            add(bullet.value, list(bullet.source_fact_ids))
+            add(bullet.value, list(bullet.source_fact_ids), "experience")
 
     for item in resume.projects:
         header = " ".join(part for part in [item.name, item.role] if part.strip())
         if header:
-            add(header)
+            add(header, source="experience")
         for bullet in item.bullets:
-            add(bullet.value, list(bullet.source_fact_ids))
+            add(bullet.value, list(bullet.source_fact_ids), "experience")
 
     for item in resume.education:
         header = _education_header(item)
         if header:
-            add(header)
+            add(header, source="education")
             grad_year = _parse_year(item.end_date)
             if grad_year:
-                add(f"{header}，{grad_year}年毕业，{_cohort_label(grad_year)}应届")
+                cohort = _cohort_label_for_date(item.end_date)
+                add(f"{header}，{item.end_date}毕业，{cohort}应届", source="education")
         for highlight in item.highlights:
-            add(highlight.value, list(highlight.source_fact_ids))
+            add(highlight.value, list(highlight.source_fact_ids), "education")
 
     for group in resume.skills:
         for item in group.items:
-            add(item.value, list(item.source_fact_ids))
+            add(item.value, list(item.source_fact_ids), "skill")
             for part in re.split(r"[、,，/|]", item.value):
-                add(part.strip(), list(item.source_fact_ids))
+                add(part.strip(), list(item.source_fact_ids), "skill")
 
     for entry in resume.certificates:
         add(entry.name)

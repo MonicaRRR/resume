@@ -13,9 +13,12 @@ from resume_mvp.domain import (
     JobAnalysis,
     JobProject,
     MatchReport,
+    ProjectTimeline,
+    QuestionSet,
     PracticeSession,
     ResumeDocument,
     ResumeVersion,
+    TimelineEvent,
     utc_now,
 )
 from resume_mvp.optimization_models import LayoutReport, OptimizationRun, OptimizationStepKind
@@ -25,6 +28,8 @@ from resume_mvp.tables import (
     OptimizationStepRecord,
     PracticeSessionRecord,
     ProjectRecord,
+    ProjectEventRecord,
+    QuestionSetRecord,
     ResumeVersionRecord,
     UserProfileRecord,
 )
@@ -40,6 +45,10 @@ class VersionNotFoundError(LookupError):
 
 
 class PracticeSessionNotFoundError(LookupError):
+    pass
+
+
+class QuestionSetNotFoundError(LookupError):
     pass
 
 
@@ -120,6 +129,9 @@ class ProjectRepository:
             session.add(version)
             session.flush()
             record.active_resume_version_id = version.id
+            self._add_event(
+                session, record.id, "project_created", "项目已创建", record.id
+            )
             session.commit()
             return self._project(record)
 
@@ -144,6 +156,12 @@ class ProjectRepository:
                 raise ProjectNotFoundError(project_id)
             session.execute(
                 delete(PracticeSessionRecord).where(PracticeSessionRecord.project_id == project_id)
+            )
+            session.execute(
+                delete(QuestionSetRecord).where(QuestionSetRecord.project_id == project_id)
+            )
+            session.execute(
+                delete(ProjectEventRecord).where(ProjectEventRecord.project_id == project_id)
             )
             optimization_run_ids = select(OptimizationRunRecord.id).where(
                 OptimizationRunRecord.project_id == project_id
@@ -224,6 +242,9 @@ class ProjectRepository:
             # Any resume/fact change invalidates the cached JD evidence map.
             project.match_report = None
             project.updated_at = utc_now()
+            self._add_event(
+                session, project_id, "resume_version", "简历版本已保存", version.id
+            )
             session.commit()
             return self._version(version)
 
@@ -276,6 +297,9 @@ class ProjectRepository:
                 raise VersionNotFoundError(version_id)
             project.active_resume_version_id = version.id
             project.updated_at = utc_now()
+            self._add_event(
+                session, project_id, "resume_version", "简历版本已切换", version.id
+            )
             session.commit()
             return self._project(project)
 
@@ -293,6 +317,14 @@ class ProjectRepository:
                     updated_at=practice.updated_at,
                 )
                 session.add(record)
+                self._add_event(
+                    session,
+                    practice.project_id,
+                    "practice_session",
+                    "训练已开始",
+                    practice.id,
+                    status=practice.status,
+                )
             else:
                 record.payload = practice.model_dump(mode="json")
                 record.updated_at = practice.updated_at
@@ -305,6 +337,193 @@ class ProjectRepository:
             if record is None:
                 raise PracticeSessionNotFoundError(session_id)
             return PracticeSession.model_validate(record.payload)
+
+    def create_question_set(self, question_set: QuestionSet) -> QuestionSet:
+        validated = QuestionSet.model_validate(question_set)
+        with self._sessions() as session:
+            if (
+                validated.project_id is not None
+                and session.get(ProjectRecord, validated.project_id) is None
+            ):
+                raise ProjectNotFoundError(validated.project_id)
+            session.add(
+                QuestionSetRecord(
+                    id=validated.id,
+                    project_id=validated.project_id,
+                    name=validated.title,
+                    source=validated.source,
+                    payload=validated.model_dump(mode="json"),
+                    created_at=validated.created_at,
+                    updated_at=validated.updated_at,
+                )
+            )
+            session.commit()
+        return validated
+
+    def list_question_sets(self, project_id: str | None = None) -> list[QuestionSet]:
+        with self._sessions() as session:
+            query = select(QuestionSetRecord)
+            if project_id is not None:
+                if session.get(ProjectRecord, project_id) is None:
+                    raise ProjectNotFoundError(project_id)
+                query = query.where(
+                    (QuestionSetRecord.project_id == project_id)
+                    | (QuestionSetRecord.project_id.is_(None))
+                )
+            records = session.scalars(query.order_by(
+                QuestionSetRecord.updated_at.desc(),
+                QuestionSetRecord.id.asc(),
+            )).all()
+            return [QuestionSet.model_validate(record.payload) for record in records]
+
+    def get_question_set(self, question_set_id: str) -> QuestionSet:
+        with self._sessions() as session:
+            record = session.get(QuestionSetRecord, question_set_id)
+            if record is None:
+                raise QuestionSetNotFoundError(question_set_id)
+            return QuestionSet.model_validate(record.payload)
+
+    def update_question_set(self, question_set_id: str, **changes: Any) -> QuestionSet:
+        with self._sessions() as session:
+            record = session.get(QuestionSetRecord, question_set_id)
+            if record is None:
+                raise QuestionSetNotFoundError(question_set_id)
+            current = QuestionSet.model_validate(record.payload)
+            if "id" in changes:
+                raise ValueError("question set identity is immutable")
+            payload = current.model_dump(mode="python")
+            payload.update(changes)
+            payload["updated_at"] = self._clock()
+            updated = QuestionSet.model_validate(payload)
+            record.name = updated.title
+            record.source = updated.source
+            record.payload = updated.model_dump(mode="json")
+            record.updated_at = updated.updated_at
+            session.commit()
+            return updated
+
+    def delete_question_set(self, question_set_id: str) -> None:
+        with self._sessions() as session:
+            record = session.get(QuestionSetRecord, question_set_id)
+            if record is None:
+                raise QuestionSetNotFoundError(question_set_id)
+            session.delete(record)
+            session.commit()
+
+    def get_timeline(self, project_id: str) -> ProjectTimeline:
+        """Build an activity projection without exposing JD, resume, prompts, or answers."""
+        with self._sessions() as session:
+            project = session.get(ProjectRecord, project_id)
+            if project is None:
+                raise ProjectNotFoundError(project_id)
+            persisted = session.scalars(
+                select(ProjectEventRecord).where(
+                    ProjectEventRecord.project_id == project_id
+                )
+            ).all()
+            events = [
+                TimelineEvent(
+                    id=record.id,
+                    type=record.event_type,
+                    title=record.title,
+                    occurred_at=record.created_at,
+                    status=record.status,
+                    resource_id=record.resource_id,
+                    summary=record.summary,
+                )
+                for record in persisted
+            ]
+            covered = {(event.type, event.resource_id) for event in events}
+            if ("project_created", project.id) not in covered:
+                events.append(
+                    TimelineEvent(
+                        id=f"project:{project.id}",
+                        type="project_created",
+                        title="项目已创建",
+                        occurred_at=project.created_at,
+                        resource_id=project.id,
+                    )
+                )
+            versions = session.scalars(
+                select(ResumeVersionRecord).where(
+                    ResumeVersionRecord.project_id == project_id
+                )
+            ).all()
+            events.extend(
+                TimelineEvent(
+                    id=f"version:{record.id}",
+                    type="resume_version",
+                    title="简历版本已保存",
+                    occurred_at=record.created_at,
+                    resource_id=record.id,
+                )
+                for record in versions
+                if ("resume_version", record.id) not in covered
+            )
+            runs = session.scalars(
+                select(OptimizationRunRecord).where(
+                    OptimizationRunRecord.project_id == project_id
+                )
+            ).all()
+            for record in runs:
+                payload = record.payload or {}
+                events.append(
+                    TimelineEvent(
+                        id=f"optimization:{record.id}",
+                        type="optimization_run",
+                        title="简历优化",
+                        occurred_at=payload.get("created_at") or record.updated_at,
+                        status=record.status,
+                        resource_id=record.id,
+                    )
+                )
+            practices = session.scalars(
+                select(PracticeSessionRecord).where(
+                    PracticeSessionRecord.project_id == project_id
+                )
+            ).all()
+            for record in practices:
+                payload = record.payload or {}
+                # Old payloads are intentionally supported: indexed columns provide
+                # all information needed when newer fields are absent.
+                events.append(
+                    TimelineEvent(
+                        id=f"practice:{record.id}",
+                        type="practice_session",
+                        title="面试训练" if payload.get("kind") == "interview" else "笔试训练",
+                        occurred_at=payload.get("created_at") or record.updated_at,
+                        status=payload.get("status", ""),
+                        resource_id=record.id,
+                        summary=f"已完成 {len(payload.get('turns') or [])} 题",
+                    )
+                )
+            events.sort(
+                key=lambda event: (event.occurred_at.timestamp(), event.id),
+                reverse=True,
+            )
+            return ProjectTimeline(project_id=project_id, events=events)
+
+    @staticmethod
+    def _add_event(
+        session: Session,
+        project_id: str,
+        event_type: str,
+        title: str,
+        resource_id: str = "",
+        *,
+        status: str = "",
+        summary: str = "",
+    ) -> None:
+        session.add(
+            ProjectEventRecord(
+                project_id=project_id,
+                event_type=event_type,
+                title=title,
+                resource_id=resource_id,
+                status=status,
+                summary=summary,
+            )
+        )
 
     def create_optimization_run(self, run: OptimizationRun) -> OptimizationRun:
         """Persist a validated, frozen optimization input and return its payload."""

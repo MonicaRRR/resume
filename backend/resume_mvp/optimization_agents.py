@@ -71,7 +71,8 @@ def _writer_prompt(
     previous_review: OptimizationReview | None,
 ) -> str:
     page_constraint = (
-        "校招/实习最终不得超过一页；优先压缩低信息表述与短尾行，禁止为填版面无意义扩写。"
+        "校招/实习最终必须且只能有一页；layout_report.page_count > 1 时必须继续给出足以消除超页的压缩/筛选操作，"
+        "优先移出低相关项目、奖项、证书、自定义栏目并压缩重复 bullets，不得只做措辞微调，也禁止为填版面无意义扩写。"
         if application_type in {"campus", "internship"}
         else "社招允许自然分页；优先消除孤立标题、稀疏末页和短尾行，禁止无意义扩写。"
     )

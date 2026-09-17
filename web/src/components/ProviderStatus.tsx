@@ -12,10 +12,15 @@ export function ProviderStatus() {
     refetchOnMount: "always",
   });
   const configured = query.data?.configured;
+  const label = query.data?.kind === "rules"
+    ? "规则分析（非生成式 AI）"
+    : configured
+      ? "生成式 AI 已连接"
+      : "配置分析方式";
   return (
     <Link className={configured ? "provider-pill connected" : "provider-pill"} to="/settings">
       <span className="status-dot" aria-hidden="true" />
-      {query.isLoading ? "检查模型…" : configured ? "模型已连接" : "配置模型"}
+      {query.isLoading ? "检查分析方式…" : label}
     </Link>
   );
 }
